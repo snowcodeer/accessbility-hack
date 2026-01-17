@@ -347,6 +347,16 @@ struct ScannerView: View {
         .onAppear {
             viewModel.loadNavigationData(mapName: mapName)
         }
+        .overlay(alignment: .topLeading) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Map: \(mapName)")
+                    .font(.caption2)
+                Text(viewModel.poiFileInfoText)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            .padding(8)
+        }
     }
     
     var scanTip: String {
@@ -413,6 +423,9 @@ class ScannerViewModel: ObservableObject {
     @Published var isExtendingExistingMap = false
     @Published var isRelocalized = true
     @Published var statusMessage: String?
+    @Published var pathPoints: [SIMD3<Float>] = []
+    @Published var storedPathCount: Int = 0
+    @Published var poiFileInfoText: String = ""
     
     let mapManager = WorldMapManager()
     let navStore = NavigationDataStore()
@@ -424,6 +437,20 @@ class ScannerViewModel: ObservableObject {
     private var collector = PointCloudCollector(cellSize: 0.2, maxPoints: 50_000)
     private var expectsRelocalization = false
     private var stableRelocalizationFrames = 0
+    
+    private func updatePOIFileInfo(for mapName: String) {
+        let info = navStore.poiFileInfo(mapName: mapName)
+        let path = "\(mapName).pois.json"
+        if info.exists {
+            if let size = info.size {
+                poiFileInfoText = "\(path): \(size / 1024) KB"
+            } else {
+                poiFileInfoText = "\(path): exists"
+            }
+        } else {
+            poiFileInfoText = "\(path): missing"
+        }
+    }
     
     func handleFrame(_ frame: ARFrame) {
         mappingStatus = frame.worldMappingStatus
@@ -442,17 +469,27 @@ class ScannerViewModel: ObservableObject {
         collector.reset(with: existingPoints)
         storedPointCount = collector.count
         pointCloudFileSize = pointStore.fileSizeBytes(mapName: mapName)
+        pathPoints = navStore.loadPath(mapName: mapName)
+        storedPathCount = pathPoints.count
+        updatePOIFileInfo(for: mapName)
     }
     
     func saveMap(name: String) async {
         guard let session = arView?.session else { return }
         do {
             try await mapManager.saveMap(from: session, name: name)
+            // Merge disk + memory POIs to avoid overwriting Locate-created POIs.
+            let diskPOIs = navStore.loadPOIs(mapName: name)
+            let mergedPOIs = mergePOIs(memory: pois, disk: diskPOIs)
+            pois = mergedPOIs
             pointStore.save(points: collector.points, mapName: name)
-            navStore.savePOIs(pois, mapName: name)
+            navStore.savePOIs(mergedPOIs, mapName: name)
+            navStore.savePath(pathPoints, mapName: name)
             pointCloudFileSize = pointStore.fileSizeBytes(mapName: name)
             storedPointCount = collector.count
-            statusMessage = "Saved map \"\(name)\" (\(storedPointCount) pts)"
+            storedPathCount = pathPoints.count
+            statusMessage = "Saved map \"\(name)\" (\(storedPointCount) pts, \(pois.count) POIs)"
+            updatePOIFileInfo(for: name)
         } catch {
             statusMessage = "Failed to save map: \(error.localizedDescription)"
         }
@@ -521,17 +558,20 @@ class ScannerViewModel: ObservableObject {
         guard let position = currentFloorPosition() else { return }
         pois.append(POI(name: name, position: position))
         navStore.savePOIs(pois, mapName: mapName)
+        updatePOIFileInfo(for: mapName)
     }
     
     func deletePOI(_ poi: POI, mapName: String) {
         pois.removeAll(where: { $0.id == poi.id })
         navStore.savePOIs(pois, mapName: mapName)
+        updatePOIFileInfo(for: mapName)
     }
     
     func renamePOI(_ poi: POI, newName: String, mapName: String) {
         guard let index = pois.firstIndex(where: { $0.id == poi.id }) else { return }
         pois[index].name = newName
         navStore.savePOIs(pois, mapName: mapName)
+        updatePOIFileInfo(for: mapName)
     }
     
     func movePOIToCurrentPosition(_ poi: POI, mapName: String) {
@@ -539,6 +579,7 @@ class ScannerViewModel: ObservableObject {
               let index = pois.firstIndex(where: { $0.id == poi.id }) else { return }
         pois[index].position = newPosition
         navStore.savePOIs(pois, mapName: mapName)
+        updatePOIFileInfo(for: mapName)
     }
     
     func defaultPOIName() -> String {
@@ -555,6 +596,7 @@ class ScannerViewModel: ObservableObject {
             expectsRelocalization = true
             stableRelocalizationFrames = 0
             statusMessage = "Loaded map \(mapName). Look around to relocalize, then keep scanning."
+            updatePOIFileInfo(for: mapName)
         } catch {
             statusMessage = "Failed to load map for extension: \(error.localizedDescription)"
         }
@@ -568,6 +610,7 @@ class ScannerViewModel: ObservableObject {
             navGraph = recorder.graph
             navStore.saveGraph(navGraph, mapName: mapName)
         }
+        appendPathSample(position)
     }
     
     private func sampleFeaturePoints(from frame: ARFrame) {
@@ -581,6 +624,22 @@ class ScannerViewModel: ObservableObject {
         }
         collector.ingest(sampled)
         storedPointCount = collector.count
+    }
+    
+    private func appendPathSample(_ position: SIMD3<Float>) {
+        if let last = pathPoints.last, simd_distance(last, position) < 0.3 { return }
+        pathPoints.append(position)
+        storedPathCount = pathPoints.count
+        if let map = recordingMapName {
+            navStore.savePath(pathPoints, mapName: map)
+        }
+    }
+    
+    private func mergePOIs(memory: [POI], disk: [POI]) -> [POI] {
+        var dict: [UUID: POI] = [:]
+        for poi in disk { dict[poi.id] = poi }
+        for poi in memory { dict[poi.id] = poi } // in-memory edits win
+        return Array(dict.values)
     }
     
     private func updateRelocalizationState(using frame: ARFrame) {
