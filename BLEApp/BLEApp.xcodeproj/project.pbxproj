@@ -13,6 +13,7 @@
 		A1001007000000000000001 /* ARViewContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1001008000000000000001 /* ARViewContainer.swift */; };
 		A1001009000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A100100A000000000000001 /* Assets.xcassets */; };
 		A100100B000000000000001 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A100100C000000000000001 /* Preview Assets.xcassets */; };
+		A100100D000000000000002 /* SerialTerminalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100100E000000000000002 /* SerialTerminalView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -24,6 +25,7 @@
 		A100100C000000000000001 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		A100100D000000000000001 /* BLEApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BLEApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A100100E000000000000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A100100E000000000000002 /* SerialTerminalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SerialTerminalView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -52,6 +54,7 @@
 				A1001004000000000000001 /* ContentView.swift */,
 				A1001006000000000000001 /* BluetoothManager.swift */,
 				A1001008000000000000001 /* ARViewContainer.swift */,
+				A100100E000000000000002 /* SerialTerminalView.swift */,
 				A100100A000000000000001 /* Assets.xcassets */,
 				A100100E000000000000001 /* Info.plist */,
 				A1001013000000000000001 /* Preview Content */,
@@ -148,6 +151,7 @@
 				A1001003000000000000001 /* ContentView.swift in Sources */,
 				A1001007000000000000001 /* ARViewContainer.swift in Sources */,
 				A1001005000000000000001 /* BluetoothManager.swift in Sources */,
+				A100100D000000000000002 /* SerialTerminalView.swift in Sources */,
 				A1001001000000000000001 /* BLEAppApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

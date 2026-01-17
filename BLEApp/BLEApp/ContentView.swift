@@ -9,6 +9,7 @@ import CoreBluetooth
 struct ContentView: View {
     @StateObject private var bluetoothManager = BluetoothManager()
     @State private var showARView = false
+    @State private var showSerialTerminal = false
 
     var body: some View {
         NavigationView {
@@ -22,7 +23,8 @@ struct ContentView: View {
                 // Action Buttons
                 ActionButtons(
                     bluetoothManager: bluetoothManager,
-                    showARView: $showARView
+                    showARView: $showARView,
+                    showSerialTerminal: $showSerialTerminal
                 )
 
                 // Device List
@@ -31,6 +33,9 @@ struct ContentView: View {
             .navigationTitle("BLE Scanner")
             .sheet(isPresented: $showARView) {
                 ARViewContainer()
+            }
+            .fullScreenCover(isPresented: $showSerialTerminal) {
+                SerialTerminalView(bluetoothManager: bluetoothManager)
             }
         }
     }
@@ -68,6 +73,7 @@ struct StatusBar: View {
 struct ActionButtons: View {
     @ObservedObject var bluetoothManager: BluetoothManager
     @Binding var showARView: Bool
+    @Binding var showSerialTerminal: Bool
 
     var body: some View {
         HStack(spacing: 12) {
@@ -106,11 +112,25 @@ struct ActionButtons: View {
                 }
 
                 Button(action: {
+                    showSerialTerminal = true
+                }) {
+                    HStack {
+                        Image(systemName: "terminal")
+                        Text("Serial")
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.green)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+                }
+
+                Button(action: {
                     showARView = true
                 }) {
                     HStack {
                         Image(systemName: "arkit")
-                        Text("Open AR")
+                        Text("AR")
                     }
                     .frame(maxWidth: .infinity)
                     .padding()
