@@ -4,27 +4,6 @@ import RealityKit
 import Combine
 import simd
 
-// MARK: - App Entry Point
-
-@main
-struct OfficeLocalizerApp: App {
-    var body: some SwiftUI.Scene {
-        WindowGroup {
-            TabView {
-                ScannerView()
-                    .tabItem {
-                        Label("Scan", systemImage: "viewfinder")
-                    }
-                
-                LocalizerView()
-                    .tabItem {
-                        Label("Locate", systemImage: "location.fill")
-                    }
-            }
-        }
-    }
-}
-
 // MARK: - Camera Pose
 
 struct CameraPose {
