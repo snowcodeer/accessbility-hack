@@ -8,35 +8,146 @@ import CoreBluetooth
 
 struct ContentView: View {
     @StateObject private var bluetoothManager = BluetoothManager()
-    @State private var showARView = false
-    @State private var showSerialTerminal = false
 
     var body: some View {
-        NavigationView {
-            VStack(spacing: 0) {
-                // Status Bar
-                StatusBar(
-                    message: bluetoothManager.statusMessage,
-                    connectedDevice: bluetoothManager.connectedDevice
-                )
+        TabView {
+            ScannerTab(bluetoothManager: bluetoothManager)
+                .tabItem {
+                    Label("Scanner", systemImage: "antenna.radiowaves.left.and.right")
+                }
 
-                // Action Buttons
-                ActionButtons(
-                    bluetoothManager: bluetoothManager,
-                    showARView: $showARView,
-                    showSerialTerminal: $showSerialTerminal
-                )
+            TerminalTab(bluetoothManager: bluetoothManager)
+                .tabItem {
+                    Label("Terminal", systemImage: "terminal")
+                }
 
-                // Device List
-                DeviceList(bluetoothManager: bluetoothManager)
+            ARTab()
+                .ignoresSafeArea(.all, edges: .all)
+                .tabItem {
+                    Label("AR View", systemImage: "arkit")
+                }
+
+            SettingsTab()
+                .tabItem {
+                    Label("Settings", systemImage: "gear")
+                }
+        }
+        .ignoresSafeArea(.all, edges: .all)
+    }
+}
+
+// MARK: - Scanner Tab
+struct ScannerTab: View {
+    @ObservedObject var bluetoothManager: BluetoothManager
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    // Status Bar
+                    StatusBar(
+                        message: bluetoothManager.statusMessage,
+                        connectedDevice: bluetoothManager.connectedDevice
+                    )
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+
+                    // Scan Control Button
+                    ScanButton(bluetoothManager: bluetoothManager)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                }
+
+                Section(header: Text("Devices")) {
+                    if bluetoothManager.discoveredDevices.isEmpty {
+                        Text(bluetoothManager.isScanning ? "Scanning for devices..." : "No devices found")
+                            .foregroundColor(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                    } else {
+                        ForEach(bluetoothManager.discoveredDevices, id: \.identifier) { device in
+                            DeviceRow(device: device)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    bluetoothManager.connect(to: device)
+                                }
+                        }
+                    }
+                }
             }
+            .listStyle(.insetGrouped)
+            .modifier(ScrollClipModifier())
             .navigationTitle("BLE Scanner")
-            .sheet(isPresented: $showARView) {
-                ARViewContainer()
-            }
-            .fullScreenCover(isPresented: $showSerialTerminal) {
+            .navigationBarTitleDisplayMode(.large)
+        }
+    }
+}
+
+// MARK: - Terminal Tab
+struct TerminalTab: View {
+    @ObservedObject var bluetoothManager: BluetoothManager
+
+    var body: some View {
+        NavigationStack {
+            if bluetoothManager.connectedDevice != nil {
                 SerialTerminalView(bluetoothManager: bluetoothManager)
+            } else {
+                VStack(spacing: 20) {
+                    Image(systemName: "terminal")
+                        .font(.system(size: 60))
+                        .foregroundColor(.secondary)
+                    Text("No Device Connected")
+                        .font(.title2)
+                        .foregroundColor(.secondary)
+                    Text("Connect to a device from the Scanner tab to use the terminal")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+                .navigationTitle("Terminal")
             }
+        }
+    }
+}
+
+// MARK: - AR Tab
+struct ARTab: View {
+    var body: some View {
+        ARViewContainer()
+    }
+}
+
+// MARK: - Settings Tab
+struct SettingsTab: View {
+    var body: some View {
+        NavigationStack {
+            List {
+                Section(header: Text("About")) {
+                    HStack {
+                        Text("Version")
+                        Spacer()
+                        Text("1.0.0")
+                            .foregroundColor(.secondary)
+                    }
+                    HStack {
+                        Text("App")
+                        Spacer()
+                        Text("BLE Scanner")
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                Section(header: Text("Bluetooth")) {
+                    HStack {
+                        Text("Status")
+                        Spacer()
+                        Text("Powered On")
+                            .foregroundColor(.green)
+                    }
+                }
+            }
+            .modifier(ScrollClipModifier())
+            .navigationTitle("Settings")
         }
     }
 }
@@ -69,11 +180,9 @@ struct StatusBar: View {
     }
 }
 
-// MARK: - Action Buttons
-struct ActionButtons: View {
+// MARK: - Scan Button
+struct ScanButton: View {
     @ObservedObject var bluetoothManager: BluetoothManager
-    @Binding var showARView: Bool
-    @Binding var showSerialTerminal: Bool
 
     var body: some View {
         HStack(spacing: 12) {
@@ -110,34 +219,6 @@ struct ActionButtons: View {
                     .foregroundColor(.white)
                     .cornerRadius(10)
                 }
-
-                Button(action: {
-                    showSerialTerminal = true
-                }) {
-                    HStack {
-                        Image(systemName: "terminal")
-                        Text("Serial")
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.green)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
-                }
-
-                Button(action: {
-                    showARView = true
-                }) {
-                    HStack {
-                        Image(systemName: "arkit")
-                        Text("AR")
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.purple)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
-                }
             }
         }
         .padding(.horizontal)
@@ -166,7 +247,7 @@ struct DeviceList: View {
                 }
             }
         }
-        .listStyle(InsetGroupedListStyle())
+        .listStyle(.insetGrouped)
     }
 }
 
@@ -183,6 +264,17 @@ struct DeviceRow: View {
                 .foregroundColor(.secondary)
         }
         .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Scroll Clip Modifier
+struct ScrollClipModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 17.0, *) {
+            content.scrollClipDisabled()
+        } else {
+            content
+        }
     }
 }
 

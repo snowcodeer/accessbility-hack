@@ -13,7 +13,6 @@ struct ARViewContainer: View {
     var body: some View {
         ZStack {
             ARViewRepresentable()
-                .edgesIgnoringSafeArea(.all)
 
             VStack {
                 HStack {
@@ -44,6 +43,7 @@ struct ARViewContainer: View {
                 .padding()
             }
         }
+        .edgesIgnoringSafeArea(.all)
     }
 }
 

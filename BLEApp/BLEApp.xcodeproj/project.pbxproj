@@ -14,6 +14,9 @@
 		A1001009000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A100100A000000000000001 /* Assets.xcassets */; };
 		A100100B000000000000001 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A100100C000000000000001 /* Preview Assets.xcassets */; };
 		A100100D000000000000002 /* SerialTerminalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100100E000000000000002 /* SerialTerminalView.swift */; };
+		A100100F000000000000003 /* ScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1001010000000000000003 /* ScannerView.swift */; };
+		A1001011000000000000003 /* LocalizerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1001012000000000000003 /* LocalizerView.swift */; };
+		A1001013000000000000003 /* OfficeLocalizerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1001014000000000000003 /* OfficeLocalizerApp.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -26,6 +29,9 @@
 		A100100D000000000000001 /* BLEApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BLEApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A100100E000000000000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A100100E000000000000002 /* SerialTerminalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SerialTerminalView.swift; sourceTree = "<group>"; };
+		A1001010000000000000003 /* ScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannerView.swift; sourceTree = "<group>"; };
+		A1001012000000000000003 /* LocalizerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizerView.swift; sourceTree = "<group>"; };
+		A1001014000000000000003 /* OfficeLocalizerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfficeLocalizerApp.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -55,6 +61,9 @@
 				A1001006000000000000001 /* BluetoothManager.swift */,
 				A1001008000000000000001 /* ARViewContainer.swift */,
 				A100100E000000000000002 /* SerialTerminalView.swift */,
+				A1001010000000000000003 /* ScannerView.swift */,
+				A1001012000000000000003 /* LocalizerView.swift */,
+				A1001014000000000000003 /* OfficeLocalizerApp.swift */,
 				A100100A000000000000001 /* Assets.xcassets */,
 				A100100E000000000000001 /* Info.plist */,
 				A1001013000000000000001 /* Preview Content */,
@@ -106,7 +115,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1500;
-				LastUpgradeCheck = 1500;
+				LastUpgradeCheck = 2620;
 				TargetAttributes = {
 					A1001014000000000000001 = {
 						CreatedOnToolsVersion = 15.0;
@@ -152,6 +161,9 @@
 				A1001007000000000000001 /* ARViewContainer.swift in Sources */,
 				A1001005000000000000001 /* BluetoothManager.swift in Sources */,
 				A100100D000000000000002 /* SerialTerminalView.swift in Sources */,
+				A100100F000000000000003 /* ScannerView.swift in Sources */,
+				A1001011000000000000003 /* LocalizerView.swift in Sources */,
+				A1001013000000000000003 /* OfficeLocalizerApp.swift in Sources */,
 				A1001001000000000000001 /* BLEAppApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -194,6 +206,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = FUPLL38F6U;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -211,12 +224,13 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -257,6 +271,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = FUPLL38F6U;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -268,11 +283,12 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};
@@ -286,7 +302,6 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"BLEApp/Preview Content\"";
-				DEVELOPMENT_TEAM = FUPLL38F6U;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = BLEApp/Info.plist;
@@ -316,7 +331,6 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"BLEApp/Preview Content\"";
-				DEVELOPMENT_TEAM = FUPLL38F6U;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = BLEApp/Info.plist;

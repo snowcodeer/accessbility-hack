@@ -20,6 +20,11 @@ class BluetoothManager: NSObject, ObservableObject {
     private var centralManager: CBCentralManager!
     private var discoveredDeviceIds = Set<UUID>()
 
+    // Auto-connect configuration
+    private let autoConnectDeviceName = "Smartibot a06c"
+    private let autoConnectDeviceUUID = UUID(uuidString: "6D35A545-4747-B962-42A0-FEC9B6F26D88")
+    @Published var autoConnectEnabled = true
+
     // Nordic UART Service UUIDs
     private let nordicUARTServiceUUID = CBUUID(string: "6E400001-B5A3-F393-E0A9-E50E24DCCA9E")
     private let nordicUARTTXCharacteristicUUID = CBUUID(string: "6E400002-B5A3-F393-E0A9-E50E24DCCA9E") // Phone writes here
@@ -143,6 +148,10 @@ extension BluetoothManager: CBCentralManagerDelegate {
         switch central.state {
         case .poweredOn:
             statusMessage = "Bluetooth Ready"
+            // Auto-start scanning if auto-connect is enabled
+            if autoConnectEnabled && connectedDevice == nil {
+                startScanning()
+            }
         case .poweredOff:
             statusMessage = "Bluetooth Off"
         case .unauthorized:
@@ -163,6 +172,17 @@ extension BluetoothManager: CBCentralManagerDelegate {
 
         discoveredDeviceIds.insert(peripheral.identifier)
         discoveredDevices.append(peripheral)
+
+        // Auto-connect if enabled and device matches
+        if autoConnectEnabled && connectedDevice == nil {
+            let matchesName = peripheral.name == autoConnectDeviceName
+            let matchesUUID = peripheral.identifier == autoConnectDeviceUUID
+
+            if matchesName || matchesUUID {
+                print("Auto-connecting to \(peripheral.name ?? "device")...")
+                connect(to: peripheral)
+            }
+        }
     }
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
