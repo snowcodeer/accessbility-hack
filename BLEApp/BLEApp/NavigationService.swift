@@ -80,7 +80,7 @@ class NavigationService: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
         speak("Navigation started to \(poi.name). Distance: \(Int(totalDistance)) meters")
 
         // Center servo initially
-        setServo(angle: 90)
+        centerServo()
         lastServoAngle = 90
     }
 
@@ -93,7 +93,7 @@ class NavigationService: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
         lastAnnouncedMilestone = Float.infinity
 
         // Center servo
-        setServo(angle: 90)
+        centerServo()
         lastServoAngle = 90
 
         // Silent - no voice announcement
@@ -154,13 +154,24 @@ class NavigationService: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
     }
 
     private func updateServoDirection(pose: CameraPose) {
-        guard currentWaypointIndex < waypoints.count else { return }
+        guard currentWaypointIndex < waypoints.count else {
+            print("🤖 No waypoints to navigate to")
+            return
+        }
 
         // Throttle to 1 second intervals
         let now = pose.timestamp
-        guard now - lastServoUpdateTime >= servoUpdateInterval else { return }
+        let timeSinceLastUpdate = now - lastServoUpdateTime
+        guard timeSinceLastUpdate >= servoUpdateInterval else {
+            // print("🤖 Throttled: \(String(format: "%.2f", timeSinceLastUpdate))s since last update")
+            return
+        }
 
         let targetWaypoint = waypoints[currentWaypointIndex]
+        print("🤖 ========== SERVO UPDATE ==========")
+        print("🤖 User pos: (\(String(format: "%.2f", pose.position.x)), \(String(format: "%.2f", pose.position.z)))")
+        print("🤖 Target waypoint: (\(String(format: "%.2f", targetWaypoint.x)), \(String(format: "%.2f", targetWaypoint.z)))")
+        print("🤖 User yaw: \(String(format: "%.1f", pose.eulerAngles.y * 180 / .pi))°")
 
         // Calculate relative bearing BEFORE clamping (for turn-around detection)
         let dx = targetWaypoint.x - pose.position.x
@@ -173,6 +184,7 @@ class NavigationService: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
         while relativeBearing < -Float.pi { relativeBearing += 2 * Float.pi }
 
         let relativeDegrees = relativeBearing * 180 / Float.pi
+        print("🤖 Relative bearing: \(String(format: "%.1f", relativeDegrees))°")
 
         // Announce "Turn around" if target is >120° behind (once per waypoint)
         if abs(relativeDegrees) > 120 && !announcedTurnAround {
@@ -186,22 +198,37 @@ class NavigationService: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
             targetPosition: targetWaypoint
         )
 
+        print("🤖 Calculated servo angle: \(newAngle)°")
+        print("🤖 Last servo angle: \(lastServoAngle)°")
+        print("🤖 Angle delta: \(abs(newAngle - lastServoAngle))° (threshold: \(servoAngleThreshold)°)")
+
         // Apply 30° threshold - only update on significant changes
         if abs(newAngle - lastServoAngle) >= servoAngleThreshold {
+            print("🤖 ✅ Threshold met, sending command")
             setServo(angle: newAngle)
             lastServoAngle = newAngle
             lastServoUpdateTime = now
+        } else {
+            print("🤖 ❌ Threshold not met, skipping update")
         }
     }
 
     private func setServo(angle: Int) {
         let clampedAngle = max(0, min(180, angle))
-        let command = "centre = \(clampedAngle)\r\n"
+        let command = "dir(\(clampedAngle))\r\n"
         let displayCommand = command.trimmingCharacters(in: .whitespacesAndNewlines)
         print("🤖 Sending BLE command: \(displayCommand)")
         print("🤖 BLE connected: \(bluetoothManager.connectedDevice != nil)")
         bluetoothManager.sendText(command)
         lastServoCommand = displayCommand  // Update UI debug display
+    }
+
+    private func centerServo() {
+        let command = "centre = 86\r\n"
+        let displayCommand = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        print("🤖 Centering servo: \(displayCommand)")
+        bluetoothManager.sendText(command)
+        lastServoCommand = displayCommand
     }
 
     // MARK: - Waypoint Progression
@@ -229,7 +256,7 @@ class NavigationService: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
 
     private func arriveAtDestination() {
         isNavigating = false
-        setServo(angle: 90)  // Center servo
+        centerServo()  // Center servo
 
         guard let dest = destination else { return }
         speak("You have arrived at \(dest.name)")

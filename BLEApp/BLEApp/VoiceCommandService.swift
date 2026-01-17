@@ -28,6 +28,8 @@ class VoiceCommandService: NSObject, ObservableObject {
     private var listeningMode: ListeningMode = .wakeWord
     private var commandWindowTask: Task<Void, Never>?
     private var commandProcessed = false  // Flag to process only one command per wake word
+    private var lastCommandTime: TimeInterval = 0  // Timestamp of last processed command
+    private let wakeWordCooldown: TimeInterval = 2.0  // Seconds to ignore wake words after processing
 
     // MARK: - Published State
 
@@ -292,6 +294,14 @@ class VoiceCommandService: NSObject, ObservableObject {
 
     private func checkForWakeWord(_ text: String) {
         let lowercased = text.lowercased().trimmingCharacters(in: .whitespaces)
+
+        // Check cooldown - ignore wake words shortly after processing a command
+        let now = Date().timeIntervalSince1970
+        let timeSinceLastCommand = now - lastCommandTime
+        if timeSinceLastCommand < wakeWordCooldown {
+            print("🎤 Wake word cooldown active (\(String(format: "%.1f", timeSinceLastCommand))s since last command)")
+            return
+        }
 
         // Check if any wake word is present
         for wakeWord in wakeWords {
