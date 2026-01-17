@@ -21,6 +21,12 @@ class NavigationService: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
     @Published var distanceToNextWaypoint: Float = 0
     @Published var distanceToDestination: Float = 0
     @Published var lastGuidanceMessage: String = ""
+    @Published var lastServoCommand: String = ""  // Debug: last BLE command sent
+
+    // Expose BLE connection status for UI
+    var bleDeviceName: String {
+        bluetoothManager.connectedDevice?.name ?? "Not connected"
+    }
 
     // MARK: - Private State
 
@@ -29,6 +35,7 @@ class NavigationService: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
     private var offRouteStartTime: TimeInterval?
     private var lastServoAngle: Int = 90
     private var lastAnnouncedMilestone: Float = Float.infinity
+    private var announcedTurnAround = false  // Track if we've announced "turn around" for current waypoint
 
     // MARK: - Configuration
 
@@ -64,6 +71,7 @@ class NavigationService: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
         self.isNavigating = true
         self.offRouteStartTime = nil
         self.lastAnnouncedMilestone = Float.infinity
+        self.announcedTurnAround = false
 
         // Calculate total distance
         let totalDistance = calculateTotalDistance()
@@ -88,7 +96,8 @@ class NavigationService: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
         setServo(angle: 90)
         lastServoAngle = 90
 
-        speak("Navigation cancelled")
+        // Silent - no voice announcement
+        print("🛑 Navigation cancelled")
     }
 
     // MARK: - Pose Updates
@@ -152,6 +161,25 @@ class NavigationService: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
         guard now - lastServoUpdateTime >= servoUpdateInterval else { return }
 
         let targetWaypoint = waypoints[currentWaypointIndex]
+
+        // Calculate relative bearing BEFORE clamping (for turn-around detection)
+        let dx = targetWaypoint.x - pose.position.x
+        let dz = targetWaypoint.z - pose.position.z
+        let targetBearing = atan2(dx, -dz)
+        var relativeBearing = targetBearing - pose.eulerAngles.y
+
+        // Normalize to [-π, π]
+        while relativeBearing > Float.pi { relativeBearing -= 2 * Float.pi }
+        while relativeBearing < -Float.pi { relativeBearing += 2 * Float.pi }
+
+        let relativeDegrees = relativeBearing * 180 / Float.pi
+
+        // Announce "Turn around" if target is >120° behind (once per waypoint)
+        if abs(relativeDegrees) > 120 && !announcedTurnAround {
+            speak("Turn around")
+            announcedTurnAround = true
+        }
+
         let newAngle = calculateServoAngle(
             userPosition: pose.position,
             userYaw: pose.eulerAngles.y,
@@ -169,9 +197,11 @@ class NavigationService: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
     private func setServo(angle: Int) {
         let clampedAngle = max(0, min(180, angle))
         let command = "centre = \(clampedAngle)\r\n"
-        print("🤖 Sending BLE command: \(command.trimmingCharacters(in: .whitespacesAndNewlines))")
+        let displayCommand = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        print("🤖 Sending BLE command: \(displayCommand)")
         print("🤖 BLE connected: \(bluetoothManager.connectedDevice != nil)")
         bluetoothManager.sendText(command)
+        lastServoCommand = displayCommand  // Update UI debug display
     }
 
     // MARK: - Waypoint Progression
@@ -189,6 +219,7 @@ class NavigationService: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
 
     private func advanceToNextWaypoint() {
         currentWaypointIndex += 1
+        announcedTurnAround = false  // Reset for next waypoint
 
         if currentWaypointIndex >= waypoints.count {
             // Reached destination
@@ -235,13 +266,11 @@ class NavigationService: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
     }
 
     private func checkDistanceMilestones() {
+        // Silent - servo handles navigation
+        // Just track milestones internally for debugging
         for milestone in distanceMilestones {
             if distanceToDestination < milestone && lastAnnouncedMilestone >= milestone {
-                if milestone >= 10 {
-                    speak("\(Int(milestone)) meters to destination")
-                } else {
-                    speak("Destination is very close")
-                }
+                print("📍 \(Int(milestone))m to destination")
                 lastAnnouncedMilestone = milestone
                 break
             }
@@ -300,7 +329,8 @@ class NavigationService: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
 
         let distanceBack = simd_distance(position, lastWaypoint)
 
-        speak("You are off route. Return to path. \(Int(distanceBack)) meters back")
+        speak("You are off route. Return to path.")
+        print("⚠️ Off route - \(Int(distanceBack))m back to path. Servo guiding back.")
     }
 
     // MARK: - Voice Guidance
@@ -308,6 +338,7 @@ class NavigationService: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
     func speak(_ text: String) {
         lastGuidanceMessage = text
         print("🔊 Voice: \(text)")
+        print("🔊 Queue size before: \(speechQueue.count), isSpeaking: \(isSpeaking)")
 
         // Add to queue
         speechQueue.append(text)
@@ -320,12 +351,14 @@ class NavigationService: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
 
     private func speakNext() {
         guard !speechQueue.isEmpty else {
+            print("🔊 Queue empty, stopping")
             isSpeaking = false
             return
         }
 
         isSpeaking = true
         let text = speechQueue.removeFirst()
+        print("🔊 Speaking now: \"\(text)\" (queue remaining: \(speechQueue.count))")
         let utterance = AVSpeechUtterance(string: text)
         utterance.rate = 0.5  // Slower for better clarity
         utterance.volume = 1.0
@@ -335,6 +368,7 @@ class NavigationService: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
     // MARK: - AVSpeechSynthesizerDelegate
 
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        print("🔊 Finished speaking: \"\(utterance.speechString)\"")
         Task { @MainActor in
             self.speakNext()
         }

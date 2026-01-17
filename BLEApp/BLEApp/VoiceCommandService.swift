@@ -27,6 +27,7 @@ class VoiceCommandService: NSObject, ObservableObject {
     private let wakeWords = ["beacon", "hey beacon"]
     private var listeningMode: ListeningMode = .wakeWord
     private var commandWindowTask: Task<Void, Never>?
+    private var commandProcessed = false  // Flag to process only one command per wake word
 
     // MARK: - Published State
 
@@ -125,11 +126,16 @@ class VoiceCommandService: NSObject, ObservableObject {
     }
 
     private func switchToCommandMode() {
-        guard listeningMode == .wakeWord else { return }
+        guard listeningMode == .wakeWord else {
+            print("🎤 Already in command mode, ignoring wake word")
+            return
+        }
 
+        print("🎤 ========== WAKE WORD DETECTED ==========")
         listeningMode = .command
         listeningForCommand = true
         wakeWordDetected = true
+        commandProcessed = false  // Reset flag for new command window
 
         // Haptic feedback
         let generator = UIImpactFeedbackGenerator(style: .medium)
@@ -157,12 +163,15 @@ class VoiceCommandService: NSObject, ObservableObject {
     }
 
     private func returnToWakeWordMode() {
-        guard listeningMode == .command else { return }
+        guard listeningMode == .command else {
+            print("🎤 Already in wake word mode")
+            return
+        }
 
         commandWindowTask?.cancel()
         commandWindowTask = nil
 
-        print("🎤 Returning to wake word listening")
+        print("🎤 ========== RETURNING TO WAKE WORD MODE ==========")
         lastCommandResult = "Waiting for wake word..."
 
         // Just switch mode - don't restart recognition
@@ -220,6 +229,12 @@ class VoiceCommandService: NSObject, ObservableObject {
                     if self.listeningMode == .wakeWord {
                         self.checkForWakeWord(transcript)
                     } else if self.listeningMode == .command {
+                        // Only process one command per wake word
+                        guard !self.commandProcessed else {
+                            print("🎤 Skipping duplicate command processing")
+                            return
+                        }
+
                         // Strip wake word from transcript
                         var commandText = transcript.lowercased()
                         print("🎤 Raw transcript: \"\(transcript)\"")
@@ -232,8 +247,11 @@ class VoiceCommandService: NSObject, ObservableObject {
                         // Process command when we have enough words (don't wait for isFinal)
                         let words = commandText.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
                         if words.count >= 2 {  // At least 2 words for a command
+                            print("🎤 Processing command ONCE: \"\(commandText)\"")
+                            self.commandProcessed = true  // Mark as processed immediately
                             self.processCommand(commandText)
-                            // Don't return to wake word immediately - let the timer do it
+                            // Return to wake word mode immediately to prevent re-triggers
+                            self.returnToWakeWordMode()
                         }
                     }
                 }
@@ -288,7 +306,8 @@ class VoiceCommandService: NSObject, ObservableObject {
 
     private func processCommand(_ text: String) {
         let lowercased = text.lowercased().trimmingCharacters(in: .whitespaces)
-        print("🎤 Processing command: \"\(lowercased)\"")
+        print("🎤 ========== PROCESSING COMMAND ==========")
+        print("🎤 Command text: \"\(lowercased)\"")
 
         // If just "navigate" without a destination, prompt for location
         if lowercased == "navigate" {

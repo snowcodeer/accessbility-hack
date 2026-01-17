@@ -163,6 +163,21 @@ struct LocalizerView: View {
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
                 }
 
+                // Servo debug info
+                if navigationService.isNavigating && !navigationService.lastServoCommand.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Servo: \(navigationService.lastServoCommand)")
+                            .font(.caption2)
+                            .foregroundColor(.orange)
+                        Text("BLE: \(navigationService.bleDeviceName)")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                }
+
                 Spacer()
                 
                 // Position display
@@ -393,9 +408,21 @@ struct LocalizerARView: UIViewRepresentable {
     
     class Coordinator: NSObject, ARSessionDelegate {
         let viewModel: LocalizerViewModel
+        private let lock = NSLock()
+        private var isProcessingFrame = false  // Throttle frame processing
+
         init(viewModel: LocalizerViewModel) { self.viewModel = viewModel }
 
         func session(_ session: ARSession, didUpdate frame: ARFrame) {
+            // Skip frame if we're still processing the previous one (thread-safe check)
+            lock.lock()
+            guard !isProcessingFrame else {
+                lock.unlock()
+                return
+            }
+            isProcessingFrame = true
+            lock.unlock()
+
             // Extract data from frame synchronously to avoid retaining ARFrame
             let pose = CameraPose(from: frame)
             let trackingState = frame.camera.trackingState
@@ -403,7 +430,12 @@ struct LocalizerARView: UIViewRepresentable {
             let featureCount = frame.rawFeaturePoints?.points.count
 
             // Use DispatchQueue instead of Task to avoid frame retention
-            DispatchQueue.main.async { [weak viewModel] in
+            DispatchQueue.main.async { [weak self, weak viewModel] in
+                defer {
+                    self?.lock.lock()
+                    self?.isProcessingFrame = false
+                    self?.lock.unlock()
+                }
                 viewModel?.handleFrameData(
                     pose: pose,
                     trackingState: trackingState,
@@ -461,6 +493,13 @@ class LocalizerViewModel: ObservableObject {
     
     func loadMap(name: String) {
         guard let arView = arView else { return }
+
+        // Clear old data first
+        pois = []
+        pointCloud = []
+        pathPoints = []
+        loadedGraph = NavGraph()
+
         do {
             try mapManager.loadMap(name: name, into: arView.session)
             loadedMapName = name
