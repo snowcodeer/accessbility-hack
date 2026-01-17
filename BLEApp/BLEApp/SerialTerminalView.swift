@@ -7,23 +7,14 @@ import SwiftUI
 
 struct SerialTerminalView: View {
     @ObservedObject var bluetoothManager: BluetoothManager
-    @Environment(\.dismiss) var dismiss
     @State private var inputText = ""
     @State private var centreValue: Double = 90
     @State private var dirValue: Double = 90
 
     var body: some View {
         VStack(spacing: 0) {
-            // Top navbar
+            // Top toolbar
             HStack {
-                Button(action: { dismiss() }) {
-                    Image(systemName: "xmark")
-                        .font(.title2)
-                        .foregroundColor(.primary)
-                }
-                Spacer()
-                Text("Serial Terminal")
-                    .font(.headline)
                 Spacer()
                 Button(action: {
                     bluetoothManager.receivedMessages.removeAll()
@@ -90,17 +81,11 @@ struct SerialTerminalView: View {
                         Text("Centre: \(Int(centreValue))°")
                             .font(.headline)
                         Spacer()
-                        // Test both command formats
-                        Button("=") {
-                            sendCommand("centre = \(Int(centreValue))\r\n")
-                        }
-                        .font(.caption)
-                        .buttonStyle(.bordered)
                     }
                     HStack(spacing: 12) {
                         Slider(value: $centreValue, in: 0...180, step: 1)
                         Button(action: {
-                            sendCommand("centre(\(Int(centreValue)))\r\n")
+                            sendCommand("centre = \(Int(centreValue))\r\n")
                         }) {
                             Image(systemName: "paperplane.fill")
                                 .foregroundColor(.white)

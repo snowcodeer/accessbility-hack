@@ -8,31 +8,42 @@ import CoreBluetooth
 
 struct ContentView: View {
     @StateObject private var bluetoothManager = BluetoothManager()
+    @State private var selectedView = 0
 
     var body: some View {
-        TabView {
-            ScannerTab(bluetoothManager: bluetoothManager)
-                .tabItem {
-                    Label("Scanner", systemImage: "antenna.radiowaves.left.and.right")
-                }
+        ZStack {
+            Color(.systemGroupedBackground)
+                .ignoresSafeArea()
 
-            TerminalTab(bluetoothManager: bluetoothManager)
-                .tabItem {
-                    Label("Terminal", systemImage: "terminal")
-                }
+            VStack(spacing: 0) {
+                // Top Bar with title and segmented control
+                VStack(spacing: 12) {
+                    HStack {
+                        Text(selectedView == 0 ? "BLE Scanner" : "Terminal")
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+                        Spacer()
+                    }
 
-            ARTab()
-                .ignoresSafeArea(.all, edges: .all)
-                .tabItem {
-                    Label("AR View", systemImage: "arkit")
+                    Picker("View", selection: $selectedView) {
+                        Text("Scanner").tag(0)
+                        Text("Terminal").tag(1)
+                    }
+                    .pickerStyle(.segmented)
                 }
+                .padding()
+                .background(Color(.systemBackground))
+                .zIndex(100)
 
-            SettingsTab()
-                .tabItem {
-                    Label("Settings", systemImage: "gear")
+                if selectedView == 0 {
+                    ScannerTab(bluetoothManager: bluetoothManager)
+                        .clipped()
+                } else {
+                    TerminalTab(bluetoothManager: bluetoothManager)
+                        .clipped()
                 }
+            }
         }
-        .ignoresSafeArea(.all, edges: .all)
     }
 }
 
@@ -41,43 +52,42 @@ struct ScannerTab: View {
     @ObservedObject var bluetoothManager: BluetoothManager
 
     var body: some View {
-        NavigationStack {
+        GeometryReader { geometry in
             List {
-                Section {
-                    // Status Bar
-                    StatusBar(
-                        message: bluetoothManager.statusMessage,
-                        connectedDevice: bluetoothManager.connectedDevice
-                    )
+            Section {
+                // Status Bar
+                StatusBar(
+                    message: bluetoothManager.statusMessage,
+                    connectedDevice: bluetoothManager.connectedDevice
+                )
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+
+                // Scan Control Button
+                ScanButton(bluetoothManager: bluetoothManager)
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
+            }
 
-                    // Scan Control Button
-                    ScanButton(bluetoothManager: bluetoothManager)
-                        .listRowInsets(EdgeInsets())
-                        .listRowBackground(Color.clear)
-                }
-
-                Section(header: Text("Devices")) {
-                    if bluetoothManager.discoveredDevices.isEmpty {
-                        Text(bluetoothManager.isScanning ? "Scanning for devices..." : "No devices found")
-                            .foregroundColor(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .center)
-                    } else {
-                        ForEach(bluetoothManager.discoveredDevices, id: \.identifier) { device in
-                            DeviceRow(device: device)
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    bluetoothManager.connect(to: device)
-                                }
-                        }
+            Section(header: Text("Devices")) {
+                if bluetoothManager.discoveredDevices.isEmpty {
+                    Text(bluetoothManager.isScanning ? "Scanning for devices..." : "No devices found")
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                } else {
+                    ForEach(bluetoothManager.discoveredDevices, id: \.identifier) { device in
+                        DeviceRow(device: device)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                bluetoothManager.connect(to: device)
+                            }
                     }
                 }
             }
+            }
             .listStyle(.insetGrouped)
             .modifier(ScrollClipModifier())
-            .navigationTitle("BLE Scanner")
-            .navigationBarTitleDisplayMode(.large)
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
     }
 }
@@ -87,67 +97,22 @@ struct TerminalTab: View {
     @ObservedObject var bluetoothManager: BluetoothManager
 
     var body: some View {
-        NavigationStack {
-            if bluetoothManager.connectedDevice != nil {
-                SerialTerminalView(bluetoothManager: bluetoothManager)
-            } else {
-                VStack(spacing: 20) {
-                    Image(systemName: "terminal")
-                        .font(.system(size: 60))
-                        .foregroundColor(.secondary)
-                    Text("No Device Connected")
-                        .font(.title2)
-                        .foregroundColor(.secondary)
-                    Text("Connect to a device from the Scanner tab to use the terminal")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                }
-                .navigationTitle("Terminal")
+        if bluetoothManager.connectedDevice != nil {
+            SerialTerminalView(bluetoothManager: bluetoothManager)
+        } else {
+            VStack(spacing: 20) {
+                Image(systemName: "terminal")
+                    .font(.system(size: 60))
+                    .foregroundColor(.secondary)
+                Text("No Device Connected")
+                    .font(.title2)
+                    .foregroundColor(.secondary)
+                Text("Connect to a device from the Scanner view to use the terminal")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
             }
-        }
-    }
-}
-
-// MARK: - AR Tab
-struct ARTab: View {
-    var body: some View {
-        ARViewContainer()
-    }
-}
-
-// MARK: - Settings Tab
-struct SettingsTab: View {
-    var body: some View {
-        NavigationStack {
-            List {
-                Section(header: Text("About")) {
-                    HStack {
-                        Text("Version")
-                        Spacer()
-                        Text("1.0.0")
-                            .foregroundColor(.secondary)
-                    }
-                    HStack {
-                        Text("App")
-                        Spacer()
-                        Text("BLE Scanner")
-                            .foregroundColor(.secondary)
-                    }
-                }
-
-                Section(header: Text("Bluetooth")) {
-                    HStack {
-                        Text("Status")
-                        Spacer()
-                        Text("Powered On")
-                            .foregroundColor(.green)
-                    }
-                }
-            }
-            .modifier(ScrollClipModifier())
-            .navigationTitle("Settings")
         }
     }
 }
