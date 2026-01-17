@@ -17,6 +17,10 @@
 		A100100F000000000000003 /* ScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1001010000000000000003 /* ScannerView.swift */; };
 		A1001011000000000000003 /* LocalizerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1001012000000000000003 /* LocalizerView.swift */; };
 		A1001013000000000000003 /* OfficeLocalizerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1001014000000000000003 /* OfficeLocalizerApp.swift */; };
+		A1001015000000000000004 /* NavigationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1001016000000000000004 /* NavigationModels.swift */; };
+		A1001017000000000000004 /* NavigationServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1001018000000000000004 /* NavigationServices.swift */; };
+		A1001019000000000000004 /* PointCloudStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100101A000000000000004 /* PointCloudStore.swift */; };
+		A100101B000000000000004 /* MiniMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100101C000000000000004 /* MiniMapView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -32,6 +36,10 @@
 		A1001010000000000000003 /* ScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannerView.swift; sourceTree = "<group>"; };
 		A1001012000000000000003 /* LocalizerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizerView.swift; sourceTree = "<group>"; };
 		A1001014000000000000003 /* OfficeLocalizerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfficeLocalizerApp.swift; sourceTree = "<group>"; };
+		A1001016000000000000004 /* NavigationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationModels.swift; sourceTree = "<group>"; };
+		A1001018000000000000004 /* NavigationServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationServices.swift; sourceTree = "<group>"; };
+		A100101A000000000000004 /* PointCloudStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PointCloudStore.swift; sourceTree = "<group>"; };
+		A100101C000000000000004 /* MiniMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniMapView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -64,6 +72,10 @@
 				A1001010000000000000003 /* ScannerView.swift */,
 				A1001012000000000000003 /* LocalizerView.swift */,
 				A1001014000000000000003 /* OfficeLocalizerApp.swift */,
+				A1001016000000000000004 /* NavigationModels.swift */,
+				A1001018000000000000004 /* NavigationServices.swift */,
+				A100101A000000000000004 /* PointCloudStore.swift */,
+				A100101C000000000000004 /* MiniMapView.swift */,
 				A100100A000000000000001 /* Assets.xcassets */,
 				A100100E000000000000001 /* Info.plist */,
 				A1001013000000000000001 /* Preview Content */,
@@ -164,6 +176,10 @@
 				A100100F000000000000003 /* ScannerView.swift in Sources */,
 				A1001011000000000000003 /* LocalizerView.swift in Sources */,
 				A1001013000000000000003 /* OfficeLocalizerApp.swift in Sources */,
+				A1001015000000000000004 /* NavigationModels.swift in Sources */,
+				A1001017000000000000004 /* NavigationServices.swift in Sources */,
+				A1001019000000000000004 /* PointCloudStore.swift in Sources */,
+				A100101B000000000000004 /* MiniMapView.swift in Sources */,
 				A1001001000000000000001 /* BLEAppApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
