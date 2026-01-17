@@ -13,11 +13,19 @@ import RealityKit
 
 struct LocalizerView: View {
     @StateObject private var viewModel = LocalizerViewModel()
+    @StateObject private var navigationService: NavigationService
+    @StateObject private var voiceCommandService: VoiceCommandService
     @State private var showingMapPicker = false
     @State private var showingAddPOI = false
     @State private var newPOIName = "POI 1"
     @AppStorage("selectedMapName") private var sharedMapName: String = "office"
-    
+
+    init(bluetoothManager: BluetoothManager) {
+        let navService = NavigationService(bluetoothManager: bluetoothManager)
+        _navigationService = StateObject(wrappedValue: navService)
+        _voiceCommandService = StateObject(wrappedValue: VoiceCommandService(navigationService: navService))
+    }
+
     var body: some View {
         ZStack {
             LocalizerARView(viewModel: viewModel)
@@ -63,7 +71,28 @@ struct LocalizerView: View {
                     }
                     
                     Spacer()
-                    
+
+                    // Voice command toggle
+                    Button {
+                        if voiceCommandService.isListening {
+                            voiceCommandService.stopListening()
+                        } else {
+                            voiceCommandService.startListening()
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: !voiceCommandService.isListening ? "mic.slash.fill" :
+                                             (voiceCommandService.listeningForCommand ? "waveform" : "mic.fill"))
+                                .foregroundColor(!voiceCommandService.isListening ? .gray :
+                                               (voiceCommandService.listeningForCommand ? .red : .blue))
+                            Text(!voiceCommandService.isListening ? "Muted" :
+                                (voiceCommandService.listeningForCommand ? "Command" : "Wake word"))
+                                .font(.caption2)
+                        }
+                    }
+
+                    Spacer()
+
                     Button { showingMapPicker = true } label: {
                         HStack {
                             Image(systemName: "map")
@@ -146,15 +175,16 @@ struct LocalizerView: View {
                 }
                 
                 if let mapName = viewModel.loadedMapName {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Text("Map View")
-                                .font(.headline)
-                            Spacer()
-                            Text("POIs: \(viewModel.pois.count)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Text("Map View")
+                                    .font(.headline)
+                                Spacer()
+                                Text("POIs: \(viewModel.pois.count)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
                         
                         if viewModel.isRelocalized {
                             Button {
@@ -165,8 +195,16 @@ struct LocalizerView: View {
                                     .frame(maxWidth: .infinity)
                             }
                             .buttonStyle(.bordered)
+
+                            // Navigation Controls
+                            if !viewModel.pois.isEmpty {
+                                NavigationControlsView(
+                                    viewModel: viewModel,
+                                    navigationService: navigationService
+                                )
+                            }
                         }
-                        
+
                         HStack {
                             Text("Stored cloud: \(viewModel.storedPointCount)")
                                 .font(.caption)
@@ -202,16 +240,34 @@ struct LocalizerView: View {
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         } else {
-                            VStack(alignment: .leading, spacing: 4) {
+                            VStack(alignment: .leading, spacing: 6) {
                                 ForEach(viewModel.pois) { poi in
-                                    Text(poi.name)
-                                        .font(.caption)
-                                        .padding(.vertical, 2)
+                                    HStack {
+                                        Text(poi.name)
+                                            .font(.caption)
+                                        Spacer()
+                                        if viewModel.isRelocalized {
+                                            Button {
+                                                guard let pose = viewModel.currentPose else { return }
+                                                navigationService.startNavigation(
+                                                    from: pose.position,
+                                                    to: poi,
+                                                    graph: viewModel.loadedGraph
+                                                )
+                                            } label: {
+                                                Image(systemName: "arrow.right.circle")
+                                                    .font(.caption)
+                                                    .foregroundColor(.blue)
+                                            }
+                                        }
+                                    }
+                                    .padding(.vertical, 2)
                                 }
                             }
                         }
+                        }
+                        .padding()
                     }
-                    .padding()
                     .frame(maxWidth: .infinity)
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
                 }
@@ -219,6 +275,13 @@ struct LocalizerView: View {
             .padding()
         }
         .onAppear {
+            // Connect navigation service to viewModel
+            viewModel.navigationService = navigationService
+
+            // Connect voice command service
+            voiceCommandService.setViewModel(viewModel)
+            voiceCommandService.requestAuthorization()
+
             // Auto-load most recent map, or refresh POIs/cloud for current map when returning to this tab.
             if let current = viewModel.loadedMapName {
                 viewModel.loadData(for: current)
@@ -229,6 +292,10 @@ struct LocalizerView: View {
                     sharedMapName = name
                 }
             }
+        }
+        .onDisappear {
+            // Stop listening when leaving the view
+            voiceCommandService.stopListening()
         }
         .sheet(isPresented: $showingMapPicker) {
             MapPickerView(viewModel: viewModel)
@@ -320,13 +387,15 @@ class LocalizerViewModel: ObservableObject {
     @Published var storedPathCount: Int = 0
     @Published var poiFileInfoText: String = ""
     @Published var pathFileInfoText: String = ""
-    
+    @Published var loadedGraph: NavGraph = NavGraph()
+
     let mapManager = WorldMapManager()
     let navStore = NavigationDataStore()
     let pointStore = PointCloudStore()
     var arView: ARView?
     private var stableRelocalizationFrames = 0
     private var expectsRelocalization = false
+    var navigationService: NavigationService?
     
     func defaultPOIName() -> String {
         "POI \(pois.count + 1)"
@@ -338,6 +407,11 @@ class LocalizerViewModel: ObservableObject {
         mappingStatus = frame.worldMappingStatus
         featureCount = frame.rawFeaturePoints?.points.count
         updateRelocalizationState()
+
+        // Forward pose to navigation service
+        if let pose = currentPose {
+            navigationService?.updateWithPose(pose)
+        }
     }
     
     func loadMap(name: String) {
@@ -360,6 +434,7 @@ class LocalizerViewModel: ObservableObject {
         pois = navStore.loadPOIs(mapName: mapName)
         pointCloud = pointStore.load(mapName: mapName)
         pathPoints = navStore.loadPath(mapName: mapName)
+        loadedGraph = navStore.loadGraph(mapName: mapName)
         storedPointCount = pointCloud.count
         storedPathCount = pathPoints.count
         pointCloudFileSize = pointStore.fileSizeBytes(mapName: mapName)

@@ -69,15 +69,13 @@ struct MiniMapView: View {
                         .stroke(Color.blue, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
                     }
                     
-                    // Walked path overlay
-                    if pathPoints.count > 1 {
-                        Path { path in
-                            path.move(to: projector.project(pathPoints[0]))
-                            for point in pathPoints.dropFirst() {
-                                path.addLine(to: projector.project(point))
-                            }
+                    // Walked path points (as dots, not connected lines to avoid drawing through walls)
+                    Canvas { context, _ in
+                        for point in pathPoints {
+                            let cg = projector.project(point)
+                            let rect = CGRect(x: cg.x - 1.5, y: cg.y - 1.5, width: 3, height: 3)
+                            context.fill(Path(ellipseIn: rect), with: .color(.purple.opacity(0.6)))
                         }
-                        .stroke(Color.purple.opacity(0.8), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
                     }
                     
                     // POI markers

@@ -20,9 +20,11 @@ struct BLEAppApp: App {
 // MARK: - Main Tab View
 
 struct MainTabView: View {
+    @StateObject private var bluetoothManager = BluetoothManager()
+
     var body: some View {
         TabView {
-            ContentView()
+            ContentView(bluetoothManager: bluetoothManager)
                 .tabItem {
                     Label("BLE Control", systemImage: "antenna.radiowaves.left.and.right")
                 }
@@ -32,7 +34,7 @@ struct MainTabView: View {
                     Label("AR Scan", systemImage: "viewfinder")
                 }
 
-            LocalizerView()
+            LocalizerView(bluetoothManager: bluetoothManager)
                 .tabItem {
                     Label("AR Locate", systemImage: "location.fill")
                 }

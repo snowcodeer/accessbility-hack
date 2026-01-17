@@ -7,8 +7,12 @@ import SwiftUI
 import CoreBluetooth
 
 struct ContentView: View {
-    @StateObject private var bluetoothManager = BluetoothManager()
+    @ObservedObject private var bluetoothManager: BluetoothManager
     @State private var selectedView = 0
+
+    init(bluetoothManager: BluetoothManager) {
+        self.bluetoothManager = bluetoothManager
+    }
 
     var body: some View {
         ZStack {
@@ -246,6 +250,6 @@ struct ScrollClipModifier: ViewModifier {
 // MARK: - Preview
 struct ContentView_Previews: PreviewProvider {
     static var previews: some View {
-        ContentView()
+        ContentView(bluetoothManager: BluetoothManager())
     }
 }
