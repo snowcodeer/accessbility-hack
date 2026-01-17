@@ -120,6 +120,9 @@ class WorldMapManager: ObservableObject {
     
     func deleteMap(name: String) {
         try? fileManager.removeItem(at: mapsDirectory.appendingPathComponent("\(name).arworldmap"))
+        try? fileManager.removeItem(at: mapsDirectory.appendingPathComponent("\(name).pointcloud.json"))
+        try? fileManager.removeItem(at: mapsDirectory.appendingPathComponent("\(name).pois.json"))
+        try? fileManager.removeItem(at: mapsDirectory.appendingPathComponent("\(name).navgraph.json"))
     }
 }
 
