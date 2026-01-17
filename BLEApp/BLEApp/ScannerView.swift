@@ -9,195 +9,305 @@ struct ScannerView: View {
     @State private var mapName = "office"
     @State private var showingSaveAlert = false
     @State private var showingMapsList = false
+    @State private var showStatus = false
+    @State private var showPosition = false
+    @State private var showActions = false
+    @State private var showNavigation = false
     @State private var showingExtendMapPicker = false
     @State private var showingPOISheet = false
     @State private var showingAddPOI = false
     @State private var newPOIName = "Office 1"
     @State private var showingClearGraphConfirm = false
-    
+
     var body: some View {
         ZStack {
             ScannerARView(viewModel: viewModel)
                 .ignoresSafeArea()
-            
-            VStack {
-                // Status bar
-                VStack(spacing: 8) {
-                    HStack {
-                        Circle()
-                            .fill(viewModel.mappingStatus.color)
-                            .frame(width: 12, height: 12)
-                        Text("Mapping: \(viewModel.mappingStatus.description)")
-                            .font(.headline)
-                        Spacer()
-                        if let count = viewModel.featureCount {
-                            Text("Frame pts: \(count)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
+
+            VStack(spacing: 8) {
+                // Compact header
+                HStack(spacing: 12) {
+                    Circle()
+                        .fill(viewModel.mappingStatus.color)
+                        .frame(width: 10, height: 10)
+                    Text(viewModel.mappingStatus.description)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    Spacer()
+                    Button { showingSaveAlert = true } label: {
+                        Image(systemName: "square.and.arrow.down")
+                            .font(.title3)
                     }
-                    
-                    HStack {
-                        Text("Stored cloud: \(viewModel.storedPointCount)")
-                            .font(.caption)
-                        if let size = viewModel.pointCloudFileSize {
-                            Text("(\(size / 1024) KB)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                    .disabled(!viewModel.mappingStatus.canSave)
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showStatus.toggle()
                         }
-                        Spacer()
-                        Text("POIs: \(viewModel.pois.count)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                    } label: {
+                        Image(systemName: showStatus ? "chevron.up.circle.fill" : "info.circle")
+                            .font(.title3)
                     }
-                    
-                    Text(scanTip)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
                 }
-                .padding()
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-                
+
+                // Relocalization warning
                 if viewModel.isExtendingExistingMap && !viewModel.isRelocalized {
                     HStack(spacing: 12) {
                         ProgressView()
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Extending existing map")
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Relocalizing...")
                                 .font(.subheadline)
-                            Text("Look around to relocalize before capturing new data.")
+                                .fontWeight(.medium)
+                            Text("Look around to find existing features")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
                         Spacer()
                     }
-                    .padding()
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
                 }
-                
+
+                // Status details dropdown
+                if showStatus {
+                    VStack(spacing: 8) {
+                        HStack {
+                            if let count = viewModel.featureCount {
+                                Text("Frame pts: \(count)")
+                                    .font(.caption)
+                            }
+                            Spacer()
+                            Text("Cloud: \(viewModel.storedPointCount)")
+                                .font(.caption)
+                            if let size = viewModel.pointCloudFileSize {
+                                Text("(\(size / 1024) KB)")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        HStack {
+                            Text("POIs: \(viewModel.pois.count)")
+                                .font(.caption)
+                            Spacer()
+                            Text("Nodes: \(viewModel.navGraph.nodes.count)")
+                                .font(.caption)
+                        }
+                        Text(scanTip)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
+
                 if let status = viewModel.statusMessage {
                     Text(status)
                         .font(.caption)
                         .foregroundColor(.secondary)
-                        .padding(.horizontal)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
                 }
-                
+
                 Spacer()
-                
-                // Position display + controls
-                VStack(spacing: 16) {
-                    if let pose = viewModel.currentPose {
+
+                // Bottom controls - collapsible sections
+                VStack(spacing: 8) {
+                    // Position toggle
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showPosition.toggle()
+                        }
+                    } label: {
                         HStack {
-                            VStack(alignment: .leading) {
-                                Text("Position").font(.caption).foregroundColor(.secondary)
-                                Text(pose.positionString).font(.system(.body, design: .monospaced))
+                            Image(systemName: "location.fill")
+                            Text("Position")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                            Spacer()
+                            Image(systemName: showPosition ? "chevron.up" : "chevron.down")
+                                .font(.caption)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+                    }
+
+                    if showPosition, let pose = viewModel.currentPose {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Position").font(.caption2).foregroundColor(.secondary)
+                                Text(pose.positionString).font(.system(.caption, design: .monospaced))
                             }
                             Spacer()
-                            VStack(alignment: .trailing) {
-                                Text("Rotation").font(.caption).foregroundColor(.secondary)
+                            VStack(alignment: .trailing, spacing: 4) {
+                                Text("Rotation").font(.caption2).foregroundColor(.secondary)
                                 Text(pose.rotationString).font(.system(.caption, design: .monospaced))
                             }
                         }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+                        .transition(.move(edge: .top).combined(with: .opacity))
                     }
-                    
-                    HStack(spacing: 20) {
-                        Button { showingMapsList = true } label: {
-                            Label("Maps", systemImage: "map")
+
+                    // Actions toggle
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showActions.toggle()
                         }
-                        .buttonStyle(.bordered)
-                        
-                        Button {
-                            showingExtendMapPicker = true
-                        } label: {
-                            Label("Extend Map", systemImage: "arrow.triangle.branch")
-                        }
-                        .buttonStyle(.bordered)
-                        
-                        Button { viewModel.addAnchor() } label: {
-                            Label("Debug Anchor", systemImage: "mappin")
-                        }
-                        .buttonStyle(.bordered)
-                        
-                        Button { showingSaveAlert = true } label: {
-                            Label("Save", systemImage: "square.and.arrow.down")
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(!viewModel.mappingStatus.canSave)
-                        
-                        Button { viewModel.reset() } label: {
-                            Label("Reset", systemImage: "arrow.counterclockwise")
-                        }
-                        .buttonStyle(.bordered)
-                        .tint(.red)
-                    }
-                    
-                    Text("Debug Anchor adds an ARAnchor + marker saved into the map; helpful to sanity-check relocalization later.")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                    
-                    Divider()
-                    
-                    VStack(alignment: .leading, spacing: 12) {
+                    } label: {
                         HStack {
-                            Text("Navigation Setup")
-                                .font(.headline)
+                            Image(systemName: "gearshape.fill")
+                            Text("Actions")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
                             Spacer()
-                            Text("\(viewModel.navGraph.nodes.count) nodes • \(viewModel.navGraph.edges.count) edges")
+                            Image(systemName: showActions ? "chevron.up" : "chevron.down")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
                         }
-                        
-                        HStack(spacing: 12) {
-                            Button {
-                                if viewModel.isRecordingCorridor {
-                                    viewModel.stopCorridorRecording()
-                                } else {
-                                    viewModel.startCorridorRecording(mapName: mapName)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+                    }
+
+                    if showActions {
+                        VStack(spacing: 10) {
+                            HStack(spacing: 10) {
+                                Button { showingMapsList = true } label: {
+                                    Label("Maps", systemImage: "map")
+                                        .font(.caption)
                                 }
-                            } label: {
-                                Label(viewModel.isRecordingCorridor ? "Stop Recording" : "Start Recording",
-                                      systemImage: viewModel.isRecordingCorridor ? "stop.circle" : "dot.radiowaves.left.and.right")
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+
+                                Button { showingExtendMapPicker = true } label: {
+                                    Label("Extend", systemImage: "arrow.triangle.branch")
+                                        .font(.caption)
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+
+                                Button { viewModel.addAnchor() } label: {
+                                    Label("Anchor", systemImage: "mappin")
+                                        .font(.caption)
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+
+                                Button { viewModel.reset() } label: {
+                                    Label("Reset", systemImage: "arrow.counterclockwise")
+                                        .font(.caption)
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                                .tint(.red)
                             }
-                            .buttonStyle(.borderedProminent)
-                            .tint(viewModel.isRecordingCorridor ? .red : .blue)
-                            
-                            Button(role: .destructive) { showingClearGraphConfirm = true } label: {
-                                Label("Clear Graph", systemImage: "trash")
-                            }
-                            .buttonStyle(.bordered)
-                        }
-                        
-                        HStack(spacing: 12) {
-                            Button {
-                                newPOIName = viewModel.defaultPOIName()
-                                showingAddPOI = true
-                            } label: {
-                                Label("Add POI", systemImage: "plus.circle")
-                            }
-                            .buttonStyle(.bordered)
-                            
-                            Button { showingPOISheet = true } label: {
-                                Label("POIs", systemImage: "list.bullet")
-                            }
-                            .buttonStyle(.bordered)
-                        }
-                        
-                        Text("Graph and POIs are saved with map \"\(mapName)\" under Documents/ARMaps.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        
-                        if viewModel.isRecordingCorridor {
-                            Text("Recording corridors... walk ~1 m between samples. Points snap to floor when available.")
+
+                            Text("Debug Anchor adds an ARAnchor marker saved into the map")
                                 .font(.caption2)
                                 .foregroundColor(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+
+                    // Navigation toggle
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showNavigation.toggle()
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: viewModel.isRecordingCorridor ? "record.circle" : "point.3.connected.trianglepath.dotted")
+                            Text("Navigation")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                            if viewModel.isRecordingCorridor {
+                                Circle()
+                                    .fill(.red)
+                                    .frame(width: 8, height: 8)
+                            }
+                            Spacer()
+                            Text("\(viewModel.navGraph.nodes.count)N • \(viewModel.navGraph.edges.count)E")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                            Image(systemName: showNavigation ? "chevron.up" : "chevron.down")
+                                .font(.caption)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+                    }
+
+                    if showNavigation {
+                        VStack(spacing: 10) {
+                            HStack(spacing: 10) {
+                                Button {
+                                    if viewModel.isRecordingCorridor {
+                                        viewModel.stopCorridorRecording()
+                                    } else {
+                                        viewModel.startCorridorRecording(mapName: mapName)
+                                    }
+                                } label: {
+                                    Label(viewModel.isRecordingCorridor ? "Stop" : "Record",
+                                          systemImage: viewModel.isRecordingCorridor ? "stop.circle" : "record.circle")
+                                        .font(.caption)
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.small)
+                                .tint(viewModel.isRecordingCorridor ? .red : .blue)
+
+                                Button { showingClearGraphConfirm = true } label: {
+                                    Label("Clear", systemImage: "trash")
+                                        .font(.caption)
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+
+                                Button {
+                                    newPOIName = viewModel.defaultPOIName()
+                                    showingAddPOI = true
+                                } label: {
+                                    Label("Add POI", systemImage: "plus.circle")
+                                        .font(.caption)
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+
+                                Button { showingPOISheet = true } label: {
+                                    Label("POIs", systemImage: "list.bullet")
+                                        .font(.caption)
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                            }
+
+                            if viewModel.isRecordingCorridor {
+                                Text("Recording corridors... walk ~1 m between samples")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+                        .transition(.move(edge: .top).combined(with: .opacity))
                     }
                 }
-                .padding()
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
             }
-            .padding()
+            .padding(.horizontal, 12)
+            .padding(.vertical, 12)
         }
         .alert("Save Map", isPresented: $showingSaveAlert) {
             TextField("Map Name", text: $mapName)
