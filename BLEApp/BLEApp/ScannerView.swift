@@ -205,7 +205,14 @@ struct ScannerView: View {
             Button("Save") { Task { await viewModel.saveMap(name: mapName) } }
         }
         .sheet(isPresented: $showingMapsList) {
-            MapsListView(manager: viewModel.mapManager)
+            MapsListView(manager: viewModel.mapManager) { name in
+                mapName = name
+                viewModel.stopCorridorRecording()
+                viewModel.isExtendingExistingMap = false
+                viewModel.isRelocalized = true
+                viewModel.loadNavigationData(mapName: name)
+                viewModel.statusMessage = "Loaded data for \(name)."
+            }
         }
         .sheet(isPresented: $showingExtendMapPicker) {
             MapsListView(manager: viewModel.mapManager) { name in
@@ -229,13 +236,6 @@ struct ScannerView: View {
         }
         .onAppear {
             viewModel.loadNavigationData(mapName: mapName)
-        }
-        .onChange(of: mapName) { newValue in
-            viewModel.stopCorridorRecording()
-            viewModel.loadNavigationData(mapName: newValue)
-            viewModel.isExtendingExistingMap = false
-            viewModel.isRelocalized = true
-            viewModel.statusMessage = nil
         }
     }
     
@@ -339,6 +339,7 @@ class ScannerViewModel: ObservableObject {
         do {
             try await mapManager.saveMap(from: session, name: name)
             pointStore.save(points: collector.points, mapName: name)
+            navStore.savePOIs(pois, mapName: name)
             pointCloudFileSize = pointStore.fileSizeBytes(mapName: name)
             storedPointCount = collector.count
             statusMessage = "Saved map \"\(name)\" (\(storedPointCount) pts)"
@@ -610,30 +611,25 @@ struct MapsListView: View {
                     Text("No saved maps").foregroundColor(.secondary)
                 } else {
                     ForEach(maps, id: \.self) { name in
-                        if let onSelect = onSelect {
-                            Button {
+                        Button {
+                            if let onSelect = onSelect {
                                 onSelect(name)
-                                dismiss()
-                            } label: {
-                                HStack {
-                                    Text(name).foregroundColor(.primary)
-                                    Spacer()
+                            }
+                            dismiss()
+                        } label: {
+                            HStack {
+                                Text(name).foregroundColor(.primary)
+                                Spacer()
+                                if onSelect != nil {
                                     Image(systemName: "arrow.right.circle")
                                         .foregroundColor(.blue)
                                 }
                             }
-                            .swipeActions {
-                                Button(role: .destructive) { manager.deleteMap(name: name) } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
+                        }
+                        .swipeActions {
+                            Button(role: .destructive) { manager.deleteMap(name: name) } label: {
+                                Label("Delete", systemImage: "trash")
                             }
-                        } else {
-                            Text(name)
-                                .swipeActions {
-                                    Button(role: .destructive) { manager.deleteMap(name: name) } label: {
-                                        Label("Delete", systemImage: "trash")
-                                    }
-                                }
                         }
                     }
                 }
