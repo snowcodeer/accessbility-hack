@@ -396,14 +396,15 @@ struct LocalizerARView: UIViewRepresentable {
         init(viewModel: LocalizerViewModel) { self.viewModel = viewModel }
 
         func session(_ session: ARSession, didUpdate frame: ARFrame) {
-            // Extract data from frame BEFORE entering Task to avoid retaining ARFrame
+            // Extract data from frame synchronously to avoid retaining ARFrame
             let pose = CameraPose(from: frame)
             let trackingState = frame.camera.trackingState
             let mappingStatus = frame.worldMappingStatus
             let featureCount = frame.rawFeaturePoints?.points.count
 
-            Task { @MainActor in
-                viewModel.handleFrameData(
+            // Use DispatchQueue instead of Task to avoid frame retention
+            DispatchQueue.main.async { [weak viewModel] in
+                viewModel?.handleFrameData(
                     pose: pose,
                     trackingState: trackingState,
                     mappingStatus: mappingStatus,

@@ -1,6 +1,7 @@
 import Foundation
 import Speech
 import AVFoundation
+import UIKit
 
 enum ListeningMode {
     case wakeWord    // Listening for "beacon" or "hey beacon"
@@ -130,8 +131,9 @@ class VoiceCommandService: NSObject, ObservableObject {
         listeningForCommand = true
         wakeWordDetected = true
 
-        // Play confirmation sound
-        AudioServicesPlaySystemSound(1519)  // Peek feedback
+        // Haptic feedback
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
 
         print("🎤 Wake word detected! Listening for command...")
         lastCommandResult = "Wake word detected! Say command..."

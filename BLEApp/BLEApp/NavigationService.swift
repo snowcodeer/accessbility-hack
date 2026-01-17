@@ -3,12 +3,14 @@ import AVFoundation
 import simd
 
 @MainActor
-class NavigationService: ObservableObject {
+class NavigationService: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     // MARK: - Dependencies
 
     private let bluetoothManager: BluetoothManager
     private let planner = AStarPlanner()
     private let speech = AVSpeechSynthesizer()
+    private var speechQueue: [String] = []
+    private var isSpeaking = false
 
     // MARK: - Published State
 
@@ -34,24 +36,15 @@ class NavigationService: ObservableObject {
     private let offRouteThreshold: Float = 3.0                // meters
     private let servoUpdateInterval: TimeInterval = 1.0       // 1 Hz
     private let servoAngleThreshold: Int = 30                 // degrees
+    private let distanceMilestones: [Float] = [50, 20, 10, 5, 2]  // meters
 
     // MARK: - Initialization
 
     init(bluetoothManager: BluetoothManager) {
         self.bluetoothManager = bluetoothManager
-        configureAudioSession()
-    }
-
-    private func configureAudioSession() {
-        do {
-            let audioSession = AVAudioSession.sharedInstance()
-            // Use playAndRecord so it's compatible with voice commands when they start
-            try audioSession.setCategory(.playAndRecord, mode: .spokenAudio, options: [.duckOthers, .defaultToSpeaker])
-            try audioSession.setActive(true, options: [])
-            print("✅ Audio session configured for speech synthesis")
-        } catch {
-            print("❌ Failed to configure audio session: \(error)")
-        }
+        super.init()
+        // Don't configure audio session here - VoiceCommandService will handle it
+        speech.delegate = self
     }
 
     // MARK: - Navigation Lifecycle
@@ -175,7 +168,10 @@ class NavigationService: ObservableObject {
 
     private func setServo(angle: Int) {
         let clampedAngle = max(0, min(180, angle))
-        bluetoothManager.sendText("centre = \(clampedAngle)\r\n")
+        let command = "centre = \(clampedAngle)\r\n"
+        print("🤖 Sending BLE command: \(command.trimmingCharacters(in: .whitespacesAndNewlines))")
+        print("🤖 BLE connected: \(bluetoothManager.connectedDevice != nil)")
+        bluetoothManager.sendText(command)
     }
 
     // MARK: - Waypoint Progression
@@ -239,9 +235,7 @@ class NavigationService: ObservableObject {
     }
 
     private func checkDistanceMilestones() {
-        let milestones: [Float] = [50, 20, 10, 5, 2]
-
-        for milestone in milestones {
+        for milestone in distanceMilestones {
             if distanceToDestination < milestone && lastAnnouncedMilestone >= milestone {
                 if milestone >= 10 {
                     speak("\(Int(milestone)) meters to destination")
@@ -313,8 +307,36 @@ class NavigationService: ObservableObject {
 
     func speak(_ text: String) {
         lastGuidanceMessage = text
-        speech.stopSpeaking(at: .immediate)  // Stop current speech
-        speech.speak(AVSpeechUtterance(string: text))  // Speak immediately
         print("🔊 Voice: \(text)")
+
+        // Add to queue
+        speechQueue.append(text)
+
+        // Process queue if not currently speaking
+        if !isSpeaking {
+            speakNext()
+        }
+    }
+
+    private func speakNext() {
+        guard !speechQueue.isEmpty else {
+            isSpeaking = false
+            return
+        }
+
+        isSpeaking = true
+        let text = speechQueue.removeFirst()
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.rate = 0.5  // Slower for better clarity
+        utterance.volume = 1.0
+        speech.speak(utterance)
+    }
+
+    // MARK: - AVSpeechSynthesizerDelegate
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            self.speakNext()
+        }
     }
 }

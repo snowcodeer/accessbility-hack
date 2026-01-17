@@ -67,6 +67,8 @@ class BluetoothManager: NSObject, ObservableObject {
     func connect(to peripheral: CBPeripheral) {
         stopScanning()
         statusMessage = "Connecting..."
+        // Retain peripheral immediately to avoid "unused peripheral" warning
+        connectedDevice = peripheral
         centralManager.connect(peripheral, options: nil)
     }
 
