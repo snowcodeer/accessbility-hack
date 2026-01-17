@@ -91,6 +91,22 @@ struct LocalizerView: View {
                         }
                     }
 
+                    // Wake word detection indicator
+                    if voiceCommandService.wakeWordDetected {
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                            Text("BEACON")
+                                .font(.caption)
+                                .fontWeight(.bold)
+                                .foregroundColor(.green)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.green.opacity(0.2))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+
                     Spacer()
 
                     Button { showingMapPicker = true } label: {
@@ -127,7 +143,26 @@ struct LocalizerView: View {
                         .foregroundColor(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                
+
+                // Voice command debug info
+                if voiceCommandService.isListening {
+                    VStack(alignment: .leading, spacing: 4) {
+                        if !voiceCommandService.lastRecognizedText.isEmpty {
+                            Text("Heard: \(voiceCommandService.lastRecognizedText)")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                        if !voiceCommandService.lastCommandResult.isEmpty {
+                            Text("Result: \(voiceCommandService.lastCommandResult)")
+                                .font(.caption2)
+                                .foregroundColor(.blue)
+                        }
+                    }
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                }
+
                 Spacer()
                 
                 // Position display
@@ -359,10 +394,21 @@ struct LocalizerARView: UIViewRepresentable {
     class Coordinator: NSObject, ARSessionDelegate {
         let viewModel: LocalizerViewModel
         init(viewModel: LocalizerViewModel) { self.viewModel = viewModel }
-        
+
         func session(_ session: ARSession, didUpdate frame: ARFrame) {
+            // Extract data from frame BEFORE entering Task to avoid retaining ARFrame
+            let pose = CameraPose(from: frame)
+            let trackingState = frame.camera.trackingState
+            let mappingStatus = frame.worldMappingStatus
+            let featureCount = frame.rawFeaturePoints?.points.count
+
             Task { @MainActor in
-                viewModel.handleFrame(frame)
+                viewModel.handleFrameData(
+                    pose: pose,
+                    trackingState: trackingState,
+                    mappingStatus: mappingStatus,
+                    featureCount: featureCount
+                )
             }
         }
     }
@@ -401,17 +447,15 @@ class LocalizerViewModel: ObservableObject {
         "POI \(pois.count + 1)"
     }
     
-    func handleFrame(_ frame: ARFrame) {
-        currentPose = CameraPose(from: frame)
-        trackingState = frame.camera.trackingState
-        mappingStatus = frame.worldMappingStatus
-        featureCount = frame.rawFeaturePoints?.points.count
+    func handleFrameData(pose: CameraPose, trackingState: ARCamera.TrackingState, mappingStatus: ARFrame.WorldMappingStatus, featureCount: Int?) {
+        currentPose = pose
+        self.trackingState = trackingState
+        self.mappingStatus = mappingStatus
+        self.featureCount = featureCount
         updateRelocalizationState()
 
         // Forward pose to navigation service
-        if let pose = currentPose {
-            navigationService?.updateWithPose(pose)
-        }
+        navigationService?.updateWithPose(pose)
     }
     
     func loadMap(name: String) {

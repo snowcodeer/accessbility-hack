@@ -39,6 +39,19 @@ class NavigationService: ObservableObject {
 
     init(bluetoothManager: BluetoothManager) {
         self.bluetoothManager = bluetoothManager
+        configureAudioSession()
+    }
+
+    private func configureAudioSession() {
+        do {
+            let audioSession = AVAudioSession.sharedInstance()
+            // Use playAndRecord so it's compatible with voice commands when they start
+            try audioSession.setCategory(.playAndRecord, mode: .spokenAudio, options: [.duckOthers, .defaultToSpeaker])
+            try audioSession.setActive(true, options: [])
+            print("✅ Audio session configured for speech synthesis")
+        } catch {
+            print("❌ Failed to configure audio session: \(error)")
+        }
     }
 
     // MARK: - Navigation Lifecycle

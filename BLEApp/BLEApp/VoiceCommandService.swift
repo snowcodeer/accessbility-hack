@@ -16,7 +16,7 @@ class VoiceCommandService: NSObject, ObservableObject {
 
     // MARK: - Speech Recognition
 
-    private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+    private var speechRecognizer: SFSpeechRecognizer?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private let audioEngine = AVAudioEngine()
@@ -33,6 +33,7 @@ class VoiceCommandService: NSObject, ObservableObject {
     @Published var listeningForCommand = false  // true when in 5-second command window
     @Published var lastRecognizedText = ""
     @Published var lastCommandResult = ""
+    @Published var wakeWordDetected = false  // true briefly when wake word is heard
     @Published var authorizationStatus: SFSpeechRecognizerAuthorizationStatus = .notDetermined
 
     // MARK: - Initialization
@@ -40,6 +41,20 @@ class VoiceCommandService: NSObject, ObservableObject {
     init(navigationService: NavigationService) {
         self.navigationService = navigationService
         super.init()
+
+        // Force English (US) locale for speech recognition
+        let enUSLocale = Locale(identifier: "en-US")
+        self.speechRecognizer = SFSpeechRecognizer(locale: enUSLocale)
+
+        if let recognizer = speechRecognizer {
+            print("✅ Speech recognizer initialized with locale: \(recognizer.locale.identifier)")
+            print("✅ Available: \(recognizer.isAvailable)")
+        } else {
+            print("❌ Failed to initialize English speech recognizer")
+            // Fallback: try just "en"
+            self.speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en"))
+            print("🔄 Trying fallback locale: \(speechRecognizer?.locale.identifier ?? "failed")")
+        }
     }
 
     func setViewModel(_ viewModel: LocalizerViewModel) {
@@ -113,27 +128,29 @@ class VoiceCommandService: NSObject, ObservableObject {
 
         listeningMode = .command
         listeningForCommand = true
+        wakeWordDetected = true
 
         // Play confirmation sound
         AudioServicesPlaySystemSound(1519)  // Peek feedback
 
         print("🎤 Wake word detected! Listening for command...")
-        lastCommandResult = "Listening for command..."
+        lastCommandResult = "Wake word detected! Say command..."
 
-        // Restart recognition in command mode
-        do {
-            try restartRecognition()
-        } catch {
-            print("❌ Failed to switch to command mode: \(error)")
-            returnToWakeWordMode()
+        // Clear wake word indicator after 0.5 seconds
+        Task {
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            self.wakeWordDetected = false
         }
+
+        // Don't restart recognition - just keep it running and process differently
+        // This prevents interruption
 
         // Return to wake word mode after 5 seconds
         commandWindowTask?.cancel()
         commandWindowTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 5_000_000_000)  // 5 seconds
             guard !Task.isCancelled else { return }
-            await self?.returnToWakeWordMode()
+            self?.returnToWakeWordMode()
         }
     }
 
@@ -146,16 +163,21 @@ class VoiceCommandService: NSObject, ObservableObject {
         print("🎤 Returning to wake word listening")
         lastCommandResult = "Waiting for wake word..."
 
-        do {
-            try startWakeWordListening()
-        } catch {
-            print("❌ Failed to return to wake word mode: \(error)")
-        }
+        // Just switch mode - don't restart recognition
+        listeningMode = .wakeWord
+        listeningForCommand = false
     }
 
     // MARK: - Speech Recognition
 
     private func startRecognition() throws {
+        // Verify we have an English speech recognizer
+        guard let recognizer = speechRecognizer else {
+            throw NSError(domain: "VoiceCommand", code: 2, userInfo: [NSLocalizedDescriptionKey: "Speech recognizer not initialized"])
+        }
+
+        print("🎤 Starting recognition with locale: \(recognizer.locale.identifier)")
+
         // Cancel existing task
         recognitionTask?.cancel()
         recognitionTask = nil
@@ -177,12 +199,14 @@ class VoiceCommandService: NSObject, ObservableObject {
         }
 
         recognitionRequest.shouldReportPartialResults = true
+        recognitionRequest.requiresOnDeviceRecognition = false  // Use cloud for better accuracy
+        recognitionRequest.taskHint = .dictation  // Optimize for continuous speech
 
         // Get audio input
         let inputNode = audioEngine.inputNode
 
-        // Start recognition task
-        recognitionTask = speechRecognizer?.recognitionTask(with: recognitionRequest) { [weak self] result, error in
+        // Start recognition task with our English recognizer
+        recognitionTask = recognizer.recognitionTask(with: recognitionRequest) { [weak self] result, error in
             guard let self = self else { return }
 
             if let result = result {
@@ -193,29 +217,41 @@ class VoiceCommandService: NSObject, ObservableObject {
                     // Check for wake word or command based on mode
                     if self.listeningMode == .wakeWord {
                         self.checkForWakeWord(transcript)
-                    } else if self.listeningMode == .command && result.isFinal {
-                        self.processCommand(transcript)
-                        self.returnToWakeWordMode()
+                    } else if self.listeningMode == .command {
+                        // Strip wake word from transcript
+                        var commandText = transcript.lowercased()
+                        print("🎤 Raw transcript: \"\(transcript)\"")
+                        for wakeWord in self.wakeWords {
+                            commandText = commandText.replacingOccurrences(of: wakeWord, with: "")
+                        }
+                        commandText = commandText.trimmingCharacters(in: .whitespaces)
+                        print("🎤 Cleaned command: \"\(commandText)\"")
+
+                        // Process command when we have enough words (don't wait for isFinal)
+                        let words = commandText.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
+                        if words.count >= 2 {  // At least 2 words for a command
+                            self.processCommand(commandText)
+                            // Don't return to wake word immediately - let the timer do it
+                        }
                     }
                 }
             }
 
             if error != nil {
                 print("⚠️ Recognition error: \(error!.localizedDescription)")
-                // Restart after error
-                Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 500_000_000)
-                    if self.isListening {
-                        try? self.restartRecognition()
-                    }
-                }
+                // Don't restart on error - just keep running
             }
         }
 
         // Configure audio format
         let recordingFormat = inputNode.outputFormat(forBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { buffer, _ in
-            recognitionRequest.append(buffer)
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
+            guard let self = self, self.isListening else { return }
+
+            // Only append buffer if it has data
+            if let channelData = buffer.floatChannelData, buffer.frameLength > 0 {
+                recognitionRequest.append(buffer)
+            }
         }
 
         // Start audio engine
@@ -252,6 +288,13 @@ class VoiceCommandService: NSObject, ObservableObject {
         let lowercased = text.lowercased().trimmingCharacters(in: .whitespaces)
         print("🎤 Processing command: \"\(lowercased)\"")
 
+        // If just "navigate" without a destination, prompt for location
+        if lowercased == "navigate" {
+            navigationService.speak("Navigate to where?")
+            lastCommandResult = "Need location"
+            return
+        }
+
         // Navigate to [location]
         if lowercased.contains("navigate to") || lowercased.contains("go to") || lowercased.contains("take me to") {
             handleNavigateCommand(lowercased)
@@ -270,7 +313,8 @@ class VoiceCommandService: NSObject, ObservableObject {
         }
         else {
             navigationService.speak("Command not understood")
-            lastCommandResult = "Unknown command"
+            lastCommandResult = "Unknown command: \(lowercased)"
+            print("❌ Unrecognized command: \"\(lowercased)\"")
         }
     }
 
