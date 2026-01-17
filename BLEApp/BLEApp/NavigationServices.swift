@@ -12,8 +12,12 @@ final class NavigationDataStore {
         mapManager.mapsDirectory.appendingPathComponent("\(mapName).navgraph.json")
     }
     
-    private func poisURL(for mapName: String) -> URL {
+    func poisURL(for mapName: String) -> URL {
         mapManager.mapsDirectory.appendingPathComponent("\(mapName).pois.json")
+    }
+    
+    private func pathURL(for mapName: String) -> URL {
+        mapManager.mapsDirectory.appendingPathComponent("\(mapName).path.json")
     }
     
     func loadGraph(mapName: String) -> NavGraph {
@@ -41,7 +45,36 @@ final class NavigationDataStore {
     
     func savePOIs(_ pois: [POI], mapName: String) {
         guard let data = try? encoder.encode(pois) else { return }
-        try? data.write(to: poisURL(for: mapName))
+        try? data.write(to: poisURL(for: mapName), options: [.atomic])
+    }
+    
+    func loadPath(mapName: String) -> [SIMD3<Float>] {
+        let url = pathURL(for: mapName)
+        guard let data = try? Data(contentsOf: url),
+              let arrays = try? decoder.decode([[Float]].self, from: data) else {
+            return []
+        }
+        return arrays.compactMap { $0.count >= 3 ? SIMD3($0[0], $0[1], $0[2]) : nil }
+    }
+    
+    func savePath(_ points: [SIMD3<Float>], mapName: String) {
+        let arrays = points.map { [$0.x, $0.y, $0.z] }
+        guard let data = try? encoder.encode(arrays) else { return }
+        try? data.write(to: pathURL(for: mapName))
+    }
+    
+    func poiFileInfo(mapName: String) -> (exists: Bool, size: Int?) {
+        let url = poisURL(for: mapName)
+        let exists = FileManager.default.fileExists(atPath: url.path)
+        let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.intValue
+        return (exists, size)
+    }
+    
+    func pathFileInfo(mapName: String) -> (exists: Bool, size: Int?) {
+        let url = pathURL(for: mapName)
+        let exists = FileManager.default.fileExists(atPath: url.path)
+        let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.intValue
+        return (exists, size)
     }
 }
 

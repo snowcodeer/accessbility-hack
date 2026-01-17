@@ -6,7 +6,7 @@ import RealityKit
 
 struct ScannerView: View {
     @StateObject private var viewModel = ScannerViewModel()
-    @State private var mapName = "office"
+    @AppStorage("selectedMapName") private var mapName: String = "office"
     @State private var showingSaveAlert = false
     @State private var showingMapsList = false
     @State private var showStatus = false

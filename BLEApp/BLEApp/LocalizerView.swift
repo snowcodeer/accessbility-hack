@@ -14,6 +14,9 @@ import RealityKit
 struct LocalizerView: View {
     @StateObject private var viewModel = LocalizerViewModel()
     @State private var showingMapPicker = false
+    @State private var showingAddPOI = false
+    @State private var newPOIName = "POI 1"
+    @AppStorage("selectedMapName") private var sharedMapName: String = "office"
     
     var body: some View {
         ZStack {
@@ -26,14 +29,18 @@ struct LocalizerView: View {
                     Circle()
                         .fill(viewModel.mappingStatus.color)
                         .frame(width: 10, height: 10)
-                    Text(viewModel.mappingStatus.description)
-                        .font(.subheadline)
-                    
-                    Divider().frame(height: 12)
-                    
-                    Text(viewModel.trackingState.description)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                Text(viewModel.mappingStatus.description)
+                    .font(.subheadline)
+                
+                Divider().frame(height: 12)
+                
+                Text(viewModel.trackingState.description)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Divider().frame(height: 12)
+                Text("Map: \(viewModel.loadedMapName ?? "none")")
+                    .font(.caption)
                     
                     if let featureCount = viewModel.featureCount {
                         Divider().frame(height: 12)
@@ -51,6 +58,8 @@ struct LocalizerView: View {
                                 .font(.caption2)
                                 .foregroundColor(.secondary)
                         }
+                        Text("Path pts: \(viewModel.storedPathCount)")
+                            .font(.caption2)
                     }
                     
                     Spacer()
@@ -147,13 +156,24 @@ struct LocalizerView: View {
                                 .foregroundColor(.secondary)
                         }
                         
+                        if viewModel.isRelocalized {
+                            Button {
+                                newPOIName = viewModel.defaultPOIName()
+                                showingAddPOI = true
+                            } label: {
+                                Label("Add POI (here)", systemImage: "plus.circle")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                        
                         HStack {
                             Text("Stored cloud: \(viewModel.storedPointCount)")
                                 .font(.caption)
                             if let size = viewModel.pointCloudFileSize {
                                 Text("(\(size / 1024) KB)")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
                             }
                             Spacer()
                             Text(viewModel.isRelocalized ? "Relocalized" : "Not relocalized")
@@ -161,11 +181,19 @@ struct LocalizerView: View {
                                 .foregroundColor(viewModel.isRelocalized ? .green : .red)
                         }
                         
+                        Text(viewModel.poiFileInfoText)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Text(viewModel.pathFileInfoText)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        
                         MiniMapView(
                             graph: NavGraph(),
                             route: [],
                             featurePoints: viewModel.pointCloud,
                             pois: viewModel.pois,
+                            pathPoints: viewModel.pathPoints,
                             userPosition: viewModel.isRelocalized ? viewModel.currentPose?.position : nil
                         )
                         
@@ -191,13 +219,27 @@ struct LocalizerView: View {
             .padding()
         }
         .onAppear {
-            // Auto-load most recent map
-            if let first = viewModel.mapManager.listMaps().first {
-                viewModel.loadMap(name: first)
+            // Auto-load most recent map, or refresh POIs/cloud for current map when returning to this tab.
+            if let current = viewModel.loadedMapName {
+                viewModel.loadData(for: current)
+            } else {
+                let initial = sharedMapName.isEmpty ? viewModel.mapManager.listMaps().first : sharedMapName
+                if let name = initial {
+                    viewModel.loadMap(name: name)
+                    sharedMapName = name
+                }
             }
         }
         .sheet(isPresented: $showingMapPicker) {
             MapPickerView(viewModel: viewModel)
+        }
+        .sheet(isPresented: $showingAddPOI) {
+            AddPOIInLocateView(newPOIName: $newPOIName) { name in
+                viewModel.addPOI(name: name)
+            }
+        }
+        .onDisappear {
+            viewModel.persistPOIsIfNeeded()
         }
     }
     
@@ -274,6 +316,10 @@ class LocalizerViewModel: ObservableObject {
     @Published var storedPointCount: Int = 0
     @Published var pointCloudFileSize: Int?
     @Published var statusMessage: String?
+    @Published var pathPoints: [SIMD3<Float>] = []
+    @Published var storedPathCount: Int = 0
+    @Published var poiFileInfoText: String = ""
+    @Published var pathFileInfoText: String = ""
     
     let mapManager = WorldMapManager()
     let navStore = NavigationDataStore()
@@ -281,6 +327,10 @@ class LocalizerViewModel: ObservableObject {
     var arView: ARView?
     private var stableRelocalizationFrames = 0
     private var expectsRelocalization = false
+    
+    func defaultPOIName() -> String {
+        "POI \(pois.count + 1)"
+    }
     
     func handleFrame(_ frame: ARFrame) {
         currentPose = CameraPose(from: frame)
@@ -295,6 +345,7 @@ class LocalizerViewModel: ObservableObject {
         do {
             try mapManager.loadMap(name: name, into: arView.session)
             loadedMapName = name
+            UserDefaults.standard.set(name, forKey: "selectedMapName")
             expectsRelocalization = true
             stableRelocalizationFrames = 0
             isRelocalized = false
@@ -308,8 +359,11 @@ class LocalizerViewModel: ObservableObject {
     func loadData(for mapName: String) {
         pois = navStore.loadPOIs(mapName: mapName)
         pointCloud = pointStore.load(mapName: mapName)
+        pathPoints = navStore.loadPath(mapName: mapName)
         storedPointCount = pointCloud.count
+        storedPathCount = pathPoints.count
         pointCloudFileSize = pointStore.fileSizeBytes(mapName: mapName)
+        updateFileInfo(mapName: mapName)
     }
     
     private func updateRelocalizationState() {
@@ -323,6 +377,73 @@ class LocalizerViewModel: ObservableObject {
             isRelocalized = true
             expectsRelocalization = false
             statusMessage = "Relocalized. Move around to view POIs and cloud."
+        }
+    }
+    
+    func addPOI(name: String) {
+        guard let mapName = loadedMapName else {
+            statusMessage = "Load a map before adding POIs."
+            return
+        }
+        guard let position = floorSnappedPosition() else {
+            statusMessage = "Need current pose to add POI."
+            return
+        }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finalName = trimmed.isEmpty ? defaultPOIName() : trimmed
+        pois.append(POI(name: finalName, position: position))
+        navStore.savePOIs(pois, mapName: mapName)
+        UserDefaults.standard.set(mapName, forKey: "selectedMapName")
+        updateFileInfo(mapName: mapName)
+        // Reload to ensure on-disk persistence is reflected in-memory
+        loadData(for: mapName)
+        statusMessage = "Saved POI \"\(finalName)\" to \(mapName)"
+    }
+    
+    func persistPOIsIfNeeded() {
+        guard let mapName = loadedMapName else { return }
+        navStore.savePOIs(pois, mapName: mapName)
+        updateFileInfo(mapName: mapName)
+    }
+    
+    private func floorSnappedPosition() -> SIMD3<Float>? {
+        guard let arView = arView, let frame = arView.session.currentFrame else {
+            return currentPose?.position
+        }
+        let cameraTransform = frame.camera.transform
+        let origin = SIMD3<Float>(cameraTransform.columns.3.x, cameraTransform.columns.3.y, cameraTransform.columns.3.z)
+        let downward = SIMD3<Float>(0, -1, 0)
+        let query = ARRaycastQuery(origin: origin, direction: downward, allowing: .estimatedPlane, alignment: .horizontal)
+        if let result = arView.session.raycast(query).first {
+            let transform = result.worldTransform
+            return SIMD3(transform.columns.3.x, transform.columns.3.y, transform.columns.3.z)
+        }
+        return origin
+    }
+    
+    private func updateFileInfo(mapName: String) {
+        let poiInfo = navStore.poiFileInfo(mapName: mapName)
+        let path = "\(mapName).pois.json"
+        if poiInfo.exists {
+            if let size = poiInfo.size {
+                poiFileInfoText = "\(path): \(size / 1024) KB"
+            } else {
+                poiFileInfoText = "\(path): exists"
+            }
+        } else {
+            poiFileInfoText = "\(path): missing"
+        }
+        
+        let pathInfo = navStore.pathFileInfo(mapName: mapName)
+        let pathFile = "\(mapName).path.json"
+        if pathInfo.exists {
+            if let size = pathInfo.size {
+                pathFileInfoText = "\(pathFile): \(size / 1024) KB"
+            } else {
+                pathFileInfoText = "\(pathFile): exists"
+            }
+        } else {
+            pathFileInfoText = "\(pathFile): missing"
         }
     }
 }
@@ -365,6 +486,35 @@ struct MapPickerView: View {
             .navigationTitle("Select Map")
             .toolbar {
                 Button("Cancel") { dismiss() }
+            }
+        }
+    }
+}
+
+struct AddPOIInLocateView: View {
+    @Binding var newPOIName: String
+    var onAdd: (String) -> Void
+    @Environment(\.dismiss) var dismiss
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                Section(header: Text("POI Name")) {
+                    TextField("Office 1", text: $newPOIName)
+                        .textInputAutocapitalization(.words)
+                }
+            }
+            .navigationTitle("Add POI")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") {
+                        onAdd(newPOIName.trimmingCharacters(in: .whitespacesAndNewlines))
+                        dismiss()
+                    }
+                }
             }
         }
     }

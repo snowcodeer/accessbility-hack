@@ -7,6 +7,7 @@ struct MiniMapView: View {
     var route: [SIMD3<Float>] = []
     var featurePoints: [SIMD3<Float>] = []
     var pois: [POI] = []
+    var pathPoints: [SIMD3<Float>] = []
     var userPosition: SIMD3<Float>?
     var destination: SIMD3<Float>?
     
@@ -15,6 +16,7 @@ struct MiniMapView: View {
         points.append(contentsOf: route)
         points.append(contentsOf: featurePoints)
         points.append(contentsOf: pois.map { $0.position })
+        points.append(contentsOf: pathPoints)
         if let userPosition { points.append(userPosition) }
         if let destination { points.append(destination) }
         return points
@@ -65,6 +67,17 @@ struct MiniMapView: View {
                             }
                         }
                         .stroke(Color.blue, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+                    }
+                    
+                    // Walked path overlay
+                    if pathPoints.count > 1 {
+                        Path { path in
+                            path.move(to: projector.project(pathPoints[0]))
+                            for point in pathPoints.dropFirst() {
+                                path.addLine(to: projector.project(point))
+                            }
+                        }
+                        .stroke(Color.purple.opacity(0.8), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
                     }
                     
                     // POI markers
