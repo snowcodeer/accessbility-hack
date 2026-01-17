@@ -2,6 +2,13 @@ import SwiftUI
 import ARKit
 import RealityKit
 
+/*
+ Quick use:
+ - Scan tab: record a map, feature-point cloud, and POIs; save as <name>. arworldmap + sidecar JSON files.
+ - Extend: pick an existing map, relocalize, keep scanning to grow the point cloud, add/update POIs, then save to overwrite.
+ - Locate tab: load the map, wait for relocalization, and view the stored point cloud + POIs on the mini-map with your current pose.
+ */
+
 // MARK: - Localizer View
 
 struct LocalizerView: View {
@@ -17,10 +24,34 @@ struct LocalizerView: View {
                 // Top status
                 HStack {
                     Circle()
-                        .fill(trackingColor)
+                        .fill(viewModel.mappingStatus.color)
                         .frame(width: 10, height: 10)
-                    Text(viewModel.trackingState.description)
+                    Text(viewModel.mappingStatus.description)
                         .font(.subheadline)
+                    
+                    Divider().frame(height: 12)
+                    
+                    Text(viewModel.trackingState.description)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    if let featureCount = viewModel.featureCount {
+                        Divider().frame(height: 12)
+                        Text("Frame pts: \(featureCount)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Divider().frame(height: 12)
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("Stored pts: \(viewModel.storedPointCount)")
+                            .font(.caption)
+                        if let size = viewModel.pointCloudFileSize {
+                            Text("(\(size / 1024) KB)")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
                     
                     Spacer()
                     
@@ -50,6 +81,13 @@ struct LocalizerView: View {
                     }
                     .padding(24)
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+                }
+                
+                if let message = viewModel.statusMessage {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 
                 Spacer()
@@ -97,6 +135,58 @@ struct LocalizerView: View {
                         .padding()
                         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
                 }
+                
+                if let mapName = viewModel.loadedMapName {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text("Map View")
+                                .font(.headline)
+                            Spacer()
+                            Text("POIs: \(viewModel.pois.count)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        HStack {
+                            Text("Stored cloud: \(viewModel.storedPointCount)")
+                                .font(.caption)
+                            if let size = viewModel.pointCloudFileSize {
+                                Text("(\(size / 1024) KB)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            Text(viewModel.isRelocalized ? "Relocalized" : "Not relocalized")
+                                .font(.caption)
+                                .foregroundColor(viewModel.isRelocalized ? .green : .red)
+                        }
+                        
+                        MiniMapView(
+                            graph: NavGraph(),
+                            route: [],
+                            featurePoints: viewModel.pointCloud,
+                            pois: viewModel.pois,
+                            userPosition: viewModel.isRelocalized ? viewModel.currentPose?.position : nil
+                        )
+                        
+                        if viewModel.pois.isEmpty {
+                            Text("No POIs saved for \(mapName). Add them in the Scan tab.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        } else {
+                            VStack(alignment: .leading, spacing: 4) {
+                                ForEach(viewModel.pois) { poi in
+                                    Text(poi.name)
+                                        .font(.caption)
+                                        .padding(.vertical, 2)
+                                }
+                            }
+                        }
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+                }
             }
             .padding()
         }
@@ -108,14 +198,6 @@ struct LocalizerView: View {
         }
         .sheet(isPresented: $showingMapPicker) {
             MapPickerView(viewModel: viewModel)
-        }
-    }
-    
-    var trackingColor: Color {
-        switch viewModel.trackingState {
-        case .normal: return .green
-        case .limited: return .yellow
-        case .notAvailable: return .red
         }
     }
     
@@ -171,13 +253,7 @@ struct LocalizerARView: UIViewRepresentable {
         
         func session(_ session: ARSession, didUpdate frame: ARFrame) {
             Task { @MainActor in
-                viewModel.currentPose = CameraPose(from: frame)
-                viewModel.trackingState = frame.camera.trackingState
-                
-                if case .normal = frame.camera.trackingState, !viewModel.isRelocalized {
-                    viewModel.isRelocalized = true
-                    print("✅ Relocalization successful!")
-                }
+                viewModel.handleFrame(frame)
             }
         }
     }
@@ -189,20 +265,64 @@ struct LocalizerARView: UIViewRepresentable {
 class LocalizerViewModel: ObservableObject {
     @Published var isRelocalized = false
     @Published var trackingState: ARCamera.TrackingState = .notAvailable
+    @Published var mappingStatus: ARFrame.WorldMappingStatus = .notAvailable
     @Published var currentPose: CameraPose?
     @Published var loadedMapName: String?
+    @Published var pois: [POI] = []
+    @Published var featureCount: Int?
+    @Published var pointCloud: [SIMD3<Float>] = []
+    @Published var storedPointCount: Int = 0
+    @Published var pointCloudFileSize: Int?
+    @Published var statusMessage: String?
     
     let mapManager = WorldMapManager()
+    let navStore = NavigationDataStore()
+    let pointStore = PointCloudStore()
     var arView: ARView?
+    private var stableRelocalizationFrames = 0
+    private var expectsRelocalization = false
+    
+    func handleFrame(_ frame: ARFrame) {
+        currentPose = CameraPose(from: frame)
+        trackingState = frame.camera.trackingState
+        mappingStatus = frame.worldMappingStatus
+        featureCount = frame.rawFeaturePoints?.points.count
+        updateRelocalizationState()
+    }
     
     func loadMap(name: String) {
         guard let arView = arView else { return }
         do {
             try mapManager.loadMap(name: name, into: arView.session)
             loadedMapName = name
+            expectsRelocalization = true
+            stableRelocalizationFrames = 0
             isRelocalized = false
+            statusMessage = "Loaded map \(name). Look around to relocalize."
+            loadData(for: name)
         } catch {
-            print("❌ Failed to load map: \(error)")
+            statusMessage = "❌ Failed to load map: \(error.localizedDescription)"
+        }
+    }
+    
+    func loadData(for mapName: String) {
+        pois = navStore.loadPOIs(mapName: mapName)
+        pointCloud = pointStore.load(mapName: mapName)
+        storedPointCount = pointCloud.count
+        pointCloudFileSize = pointStore.fileSizeBytes(mapName: mapName)
+    }
+    
+    private func updateRelocalizationState() {
+        guard expectsRelocalization else { return }
+        if case .normal = trackingState, mappingStatus != .notAvailable {
+            stableRelocalizationFrames += 1
+        } else {
+            stableRelocalizationFrames = 0
+        }
+        if stableRelocalizationFrames > 10 {
+            isRelocalized = true
+            expectsRelocalization = false
+            statusMessage = "Relocalized. Move around to view POIs and cloud."
         }
     }
 }
